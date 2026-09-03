@@ -104,6 +104,17 @@ function testExclusionsRecalculateTarget() {
   assert(progress.requiredDays === 93, '108 eligible days should require ceil(108 * 6/7) = 93 activity days');
 }
 
+function testLegWeekTargetTracksElapsedWeeks() {
+  const weekOne = playerProgress(stateFor(), 'vlad', '2026-09-03');
+  const weekTwo = playerProgress(stateFor(), 'vlad', '2026-09-08');
+  const finalWeek = playerProgress(stateFor(), 'vlad', '2026-12-20');
+
+  assert(weekOne.requiredLegWeeks === 1, 'Week one should require 1 leg day so far');
+  assert(weekTwo.requiredLegWeeks === 2, 'Week two should require 2 leg days so far');
+  assert(finalWeek.requiredLegWeeks === 16, 'Final week should require all 16 leg days');
+  assert(finalWeek.totalRequiredLegWeeks === 16, 'Full contract target should remain 16 leg weeks');
+}
+
 function testCompletionRequiresActivityTargetAndLegWeeks() {
   const noLegDays = challengeDates.slice(0, 96).map((date) => activity(date, { type: 'gym' as ActivityType }));
   assert(!playerProgress(stateFor(noLegDays), 'vlad').completed, 'Activity target alone should not complete the challenge without leg weeks');
@@ -111,7 +122,7 @@ function testCompletionRequiresActivityTargetAndLegWeeks() {
   const completeState = stateFor(completingActivities('vlad'));
   const progress = playerProgress(completeState, 'vlad');
   assert(progress.activityDays === 96, 'Completion fixture should have 96 counted activity days');
-  assert(progress.legWeeks === 16, 'Completion fixture should cover all 16 leg weeks');
+  assert(progress.totalLegWeeks === 16, 'Completion fixture should cover all 16 leg weeks');
   assert(progress.completed, 'Participant should complete after meeting activity target and all leg weeks');
 }
 
@@ -119,6 +130,7 @@ testActivityBoundaries();
 testChallengeShape();
 testOneActivityPerDay();
 testExclusionsRecalculateTarget();
+testLegWeekTargetTracksElapsedWeeks();
 testCompletionRequiresActivityTargetAndLegWeeks();
 
 console.log('Peak 25 contract tests passed');

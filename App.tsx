@@ -990,7 +990,7 @@ function GroupScreen({ state }: { state: AppState }) {
         <View style={styles.targetIcon}><AppIcon name="target" size={22} color={C.ink} /></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.targetTitle}>Finish line</Text>
-          <Text style={styles.targetCopy}>At least 6/7 eligible days + every required leg week</Text>
+          <Text style={styles.targetCopy}>At least 6/7 eligible days + each weekly leg-day goal as it unlocks</Text>
         </View>
         <Text style={styles.targetDate}>20 DEC</Text>
       </View>
@@ -1012,7 +1012,7 @@ function GroupScreen({ state }: { state: AppState }) {
                   <Text style={[styles.paceText, { color: onPace ? '#527A28' : '#A35A34' }]}>{onPace ? 'ON PACE' : 'BEHIND'}</Text>
                 </View>
                 <ProgressBar value={entry.currentRate} color={entry.player.color} track="#ECEAE4" />
-                <Text style={styles.rankMeta}>{entry.progress.activityDays} activity days · {entry.progress.legWeeks}/{entry.progress.requiredLegWeeks} leg weeks</Text>
+                <Text style={styles.rankMeta}>{entry.progress.activityDays} activity days · {entry.progress.legWeeks}/{entry.progress.requiredLegWeeks} leg weeks due</Text>
               </View>
               <Text style={styles.rankPercent}>{Math.round(entry.currentRate * 100)}%</Text>
             </View>
@@ -1035,7 +1035,7 @@ function GroupScreen({ state }: { state: AppState }) {
 const rules = [
   { icon: 'calendar', title: '6/7 eligible days', copy: 'Complete one valid activity on at least 6/7 of eligible days across the whole period—not week by week.' },
   { icon: 'minus', title: 'One activity per day', copy: 'Extra workouts on the same calendar day do not create extra credits.' },
-  { icon: 'legDay', title: 'Weekly leg day', copy: 'At least one qualifying leg day in every calendar week: >30 minutes and 8+ genuine leg working sets.' },
+  { icon: 'legDay', title: 'Weekly leg day', copy: 'The goal climbs as weeks arrive: week 1 is 1/1, week 2 is 2/2, until all challenge weeks are due.' },
   { icon: 'edit', title: 'Quick logging', copy: 'Choose an activity, pick the date, and enter only the stats needed for that activity type.' },
   { icon: 'wellness', title: 'Medical exclusions', copy: 'Genuine injury or significant illness removes affected days. Work, travel, studies and fatigue do not.' },
   { icon: 'cash', title: '1,000 SEK if you fail', copy: 'Each failed participant pays 1,000 SEK, divided equally among all successful participants.' },
