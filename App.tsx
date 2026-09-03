@@ -453,9 +453,6 @@ function ActivityModal({
   const [distance, setDistance] = useState('');
   const [holes, setHoles] = useState('');
   const [walkedGolf, setWalkedGolf] = useState(true);
-  const durationOptions = type === 'gym' || type === 'leg-day'
-    ? [31, 35, 40, 45, 50, 60, 75, 90, 120]
-    : [30, 35, 40, 45, 50, 60, 75, 90, 120];
   const setOptions = type === 'leg-day' ? [8, 10, 12, 15, 18, 20, 24] : [9, 10, 12, 15, 18, 20, 24];
 
   useEffect(() => {
@@ -479,6 +476,14 @@ function ActivityModal({
   const canSave = dateValid && qualifies;
   const selectedDefinition = activityDefinitions.find((item) => item.id === type)!;
 
+  const selectActivityType = (nextType: ActivityType) => {
+    setType(nextType);
+    if (nextType === 'golf') {
+      setHoles((current) => current || '9');
+      setWalkedGolf(true);
+    }
+  };
+
   const save = () => {
     if (!canSave) return;
     onSave({ ...candidate, id: createActivityId(playerId, date), playerId });
@@ -500,7 +505,7 @@ function ActivityModal({
             {activityDefinitions.map((item) => {
               const active = item.id === type;
               return (
-                <Pressable key={item.id} onPress={() => setType(item.id)} style={[styles.activityChoice, active && styles.activityChoiceActive]}>
+                <Pressable key={item.id} onPress={() => selectActivityType(item.id)} style={[styles.activityChoice, active && styles.activityChoiceActive]}>
                   <View style={[styles.activityChoiceIcon, { backgroundColor: item.color }]}>
                     <AppIcon name={item.icon} size={20} color={C.ink} />
                   </View>
@@ -561,7 +566,7 @@ function ActivityModal({
                 value={holes}
                 onChange={setHoles}
                 options={[9, 18]}
-                placeholder="Pick holes"
+                placeholder="Pick 9+ holes"
                 suffix="holes"
                 step={9}
               />
@@ -1320,6 +1325,15 @@ const styles = StyleSheet.create({
   metricOptionActive: { backgroundColor: C.ink, borderColor: C.ink },
   metricOptionText: { color: C.muted, fontSize: 11, fontWeight: '900' },
   metricOptionTextActive: { color: '#FFFFFF' },
+  durationWheelCard: { height: 128, marginTop: 13, borderRadius: 16, backgroundColor: '#F6F5F0', borderWidth: 1, borderColor: C.line, overflow: 'hidden', flexDirection: 'row', position: 'relative' },
+  durationSelectionBand: { position: 'absolute', left: 8, right: 8, top: 45, height: 38, borderRadius: 13, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DCD8CC' },
+  wheelColumn: { flex: 1, height: 128 },
+  wheelContent: { paddingVertical: 45 },
+  wheelItem: { height: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
+  wheelNumber: { width: 38, textAlign: 'right', color: '#98A19D', fontSize: 20, fontWeight: '900' },
+  wheelNumberActive: { color: C.ink, fontSize: 25 },
+  wheelUnit: { width: 42, color: '#98A19D', fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
+  wheelUnitActive: { color: C.muted },
   chipRow: { gap: 7, paddingRight: 20 },
   chip: { paddingHorizontal: 13, paddingVertical: 9, borderRadius: 14, backgroundColor: C.card, borderWidth: 1, borderColor: C.line },
   chipActive: { backgroundColor: C.ink, borderColor: C.ink },

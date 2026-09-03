@@ -13,7 +13,7 @@ export const activityDefinitions: ActivityDefinition[] = [
   { id: 'stairmaster', label: 'StairMaster', shortRule: '30+ minutes', icon: 'stairmaster', color: '#F5C6C6' },
   { id: 'cycling', label: 'Cycling', shortRule: '30+ minutes', icon: 'cycling', color: '#CFE1FF' },
   { id: 'swimming', label: 'Swimming', shortRule: '30+ minutes', icon: 'swimming', color: '#BEEAEC' },
-  { id: 'golf', label: 'Golf', shortRule: 'Walk 9+ holes', icon: 'golf', color: '#D9E7C2' },
+  { id: 'golf', label: 'Golf', shortRule: '9+ holes while walking', icon: 'golf', color: '#D9E7C2' },
   { id: 'tennis', label: 'Tennis', shortRule: '30+ minutes', icon: 'tennis', color: '#F4E77D' },
   { id: 'padel', label: 'Padel', shortRule: '30+ minutes', icon: 'padel', color: '#BFEBD5' },
   { id: 'other', label: 'Other sport', shortRule: '30+ minutes', icon: 'other', color: '#DECFFF' },
@@ -90,27 +90,33 @@ export function isActivityValid(activity: Omit<Activity, 'id' | 'playerId'>) {
   }
 }
 
-export function playerProgress(state: AppState, playerId: PlayerId) {
+export function playerProgress(state: AppState, playerId: PlayerId, today = todayWithinChallenge()) {
   const validActivities = state.activities.filter((activity) => activity.playerId === playerId && isActivityValid(activity));
   const validDays = new Set(validActivities.map((activity) => activity.date));
   const exclusionDays = new Set(state.exclusions.filter((item) => item.playerId === playerId).map((item) => item.date));
   const eligibleDays = challengeDates.length - exclusionDays.size;
   const requiredDays = Math.ceil(eligibleDays * 6 / 7);
   const legWeeks = new Set(validActivities.filter((activity) => activity.type === 'leg-day').map((activity) => isoWeekKey(activity.date)));
+  const currentWeek = isoWeekKey(today);
+  const elapsedLegWeeks = challengeWeeks.filter((week) => week <= currentWeek);
   const excludedLegWeeks = new Set(
     state.exclusions
       .filter((item) => item.playerId === playerId && item.excludesLegWeek)
       .map((item) => isoWeekKey(item.date)),
   );
   const requiredLegWeeks = challengeWeeks.filter((week) => !excludedLegWeeks.has(week));
+  const requiredLegWeeksToDate = elapsedLegWeeks.filter((week) => !excludedLegWeeks.has(week));
+  const legWeeksToDate = new Set([...legWeeks].filter((week) => requiredLegWeeksToDate.includes(week)));
   return {
     activityDays: validDays.size,
     eligibleDays,
     requiredDays,
-    legWeeks: legWeeks.size,
-    requiredLegWeeks: requiredLegWeeks.length,
+    legWeeks: legWeeksToDate.size,
+    requiredLegWeeks: requiredLegWeeksToDate.length,
+    totalLegWeeks: legWeeks.size,
+    totalRequiredLegWeeks: requiredLegWeeks.length,
     activityPercent: requiredDays === 0 ? 1 : Math.min(1, validDays.size / requiredDays),
-    legPercent: requiredLegWeeks.length === 0 ? 1 : Math.min(1, legWeeks.size / requiredLegWeeks.length),
+    legPercent: requiredLegWeeksToDate.length === 0 ? 1 : Math.min(1, legWeeksToDate.size / requiredLegWeeksToDate.length),
     completed: validDays.size >= requiredDays && requiredLegWeeks.every((week) => legWeeks.has(week)),
   };
 }
