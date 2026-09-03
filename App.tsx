@@ -14,7 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
-  Circle,
+  Circle as CircleIcon,
   CircleDot,
   Cloud,
   CloudDownload,
@@ -57,6 +57,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Circle as SvgCircle, Line, Path, Rect } from 'react-native-svg';
 import {
   activityDefinitions,
   activityLabel,
@@ -141,7 +142,7 @@ const iconMap: Record<string, LucideIcon> = {
   target: Flag,
   tennis: CircleDot,
   trophy: Trophy,
-  unselected: Circle,
+  unselected: CircleIcon,
   wellness: HeartPulse,
 };
 
@@ -156,8 +157,82 @@ function AppIcon({
   color?: string;
   strokeWidth?: number;
 }) {
-  const Icon = iconMap[name] ?? Circle;
+  if (['stairmaster', 'tennis', 'golf', 'padel'].includes(name)) {
+    return <CustomActivityIcon name={name} size={size} color={color} strokeWidth={strokeWidth} />;
+  }
+  const Icon = iconMap[name] ?? CircleIcon;
   return <Icon color={color} size={size} strokeWidth={strokeWidth} />;
+}
+
+function CustomActivityIcon({
+  name,
+  size,
+  color,
+  strokeWidth,
+}: {
+  name: string;
+  size: number;
+  color: string;
+  strokeWidth: number;
+}) {
+  const lineProps = {
+    stroke: color,
+    strokeWidth,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    fill: 'none',
+  };
+
+  if (name === 'stairmaster') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Path d="M4 19h5v-4h5v-4h6" {...lineProps} />
+        <Path d="M15 7h5v12" {...lineProps} />
+        <SvgCircle cx="8" cy="6" r="2" fill="none" stroke={color} strokeWidth={strokeWidth} />
+        <Path d="M8 8l3 3 2-2" {...lineProps} />
+        <Path d="M9 12l-2 3" {...lineProps} />
+      </Svg>
+    );
+  }
+
+  if (name === 'tennis') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Path d="M14.7 4.4c2.7 2.7 3.1 6.5.9 8.7s-6 .8-8.7-1.9-3.1-6.5-.9-8.7 6-.8 8.7 1.9z" {...lineProps} />
+        <Line x1="6.7" y1="11" x2="3.5" y2="14.2" {...lineProps} />
+        <Path d="M3.5 14.2l-1.9 1.9 2.3 2.3 1.9-1.9" {...lineProps} />
+        <Path d="M8.2 3.3l7.9 7.9" {...lineProps} />
+        <Path d="M5.8 5.7l7.9 7.9" {...lineProps} />
+        <SvgCircle cx="18.5" cy="18.4" r="2.1" fill="none" stroke={color} strokeWidth={strokeWidth} />
+      </Svg>
+    );
+  }
+
+  if (name === 'golf') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <SvgCircle cx="8" cy="5" r="1.8" fill="none" stroke={color} strokeWidth={strokeWidth} />
+        <Path d="M8 7l2.6 4.2" {...lineProps} />
+        <Path d="M10.6 11.2l3.4 2" {...lineProps} />
+        <Path d="M10 11.5l-2.6 3.8" {...lineProps} />
+        <Path d="M13.8 13.2l4.1-6.6" {...lineProps} />
+        <Line x1="17.9" y1="6.6" x2="20.5" y2="8.2" {...lineProps} />
+        <SvgCircle cx="20" cy="19" r="1" fill={color} />
+        <Path d="M3.5 20h9.5" {...lineProps} />
+      </Svg>
+    );
+  }
+
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Rect x="7" y="3" width="8.5" height="13" rx="3.8" transform="rotate(-21 11.25 9.5)" {...lineProps} />
+      <Line x1="13.5" y1="15" x2="16.5" y2="21" {...lineProps} />
+      <Line x1="15" y1="20" x2="19" y2="18" {...lineProps} />
+      <SvgCircle cx="10" cy="7.2" r="0.6" fill={color} />
+      <SvgCircle cx="11.8" cy="10" r="0.6" fill={color} />
+      <SvgCircle cx="13" cy="12.8" r="0.6" fill={color} />
+    </Svg>
+  );
 }
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -444,15 +519,13 @@ function ActivityModal({
           <DatePickerField label="DATE" value={date} onChange={setDate} />
 
           {(type !== 'golf') && (
-            <MetricPickerField
+            <DurationWheelField
               icon="duration"
               label="DURATION"
               value={duration}
               onChange={setDuration}
-              options={durationOptions}
               placeholder={type === 'running' ? 'Pick minutes or use distance below' : 'Pick minutes'}
-              suffix="min"
-              step={5}
+              minimumMinutes={type === 'gym' || type === 'leg-day' ? 31 : 30}
             />
           )}
           {(type === 'gym' || type === 'leg-day') && (
@@ -597,6 +670,109 @@ function MetricPickerField({
         </ScrollView>
       </View>
     </>
+  );
+}
+
+function DurationWheelField({
+  icon,
+  label,
+  value,
+  onChange,
+  placeholder,
+  minimumMinutes,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  minimumMinutes: number;
+}) {
+  const numericValue = Number(value);
+  const hasValue = value.trim().length > 0 && Number.isFinite(numericValue);
+  const selectedMinutes = hasValue ? Math.max(0, Math.round(numericValue)) : minimumMinutes;
+  const selectedHours = Math.floor(selectedMinutes / 60);
+  const selectedMinuteRemainder = selectedMinutes % 60;
+  const hourOptions = [0, 1, 2, 3];
+  const minuteOptions = Array.from({ length: 12 }, (_, index) => index * 5);
+
+  const commitDuration = (hours: number, minutes: number) => {
+    const total = hours * 60 + minutes;
+    onChange(String(Math.max(minimumMinutes, total)));
+  };
+
+  return (
+    <>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={styles.metricPicker}>
+        <View style={styles.metricTopRow}>
+          <View style={styles.metricIcon}>
+            <AppIcon name={icon} size={18} color={C.ink} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.metricMeta}>{hasValue ? 'Selected' : 'Scroll to choose'}</Text>
+            <Text style={[styles.metricValue, !hasValue && styles.metricPlaceholder]}>
+              {hasValue ? `${selectedMinutes} min` : placeholder}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.durationWheelCard}>
+          <View style={styles.durationSelectionBand} pointerEvents="none" />
+          <WheelColumn
+            label="hours"
+            options={hourOptions}
+            selectedValue={selectedHours}
+            onSelect={(nextHours) => commitDuration(nextHours, selectedMinuteRemainder)}
+          />
+          <WheelColumn
+            label="min"
+            options={minuteOptions}
+            selectedValue={Math.round(selectedMinuteRemainder / 5) * 5}
+            onSelect={(nextMinutes) => commitDuration(selectedHours, nextMinutes)}
+          />
+        </View>
+      </View>
+    </>
+  );
+}
+
+function WheelColumn({
+  label,
+  options,
+  selectedValue,
+  onSelect,
+}: {
+  label: string;
+  options: number[];
+  selectedValue: number;
+  onSelect: (value: number) => void;
+}) {
+  return (
+    <View style={styles.wheelColumn}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        snapToInterval={38}
+        decelerationRate="fast"
+        contentContainerStyle={styles.wheelContent}
+      >
+        {options.map((option) => {
+          const active = option === selectedValue;
+          return (
+            <Pressable
+              key={`${label}-${option}`}
+              accessibilityRole="button"
+              accessibilityLabel={`${option} ${label}`}
+              onPress={() => onSelect(option)}
+              style={styles.wheelItem}
+            >
+              <Text style={[styles.wheelNumber, active && styles.wheelNumberActive]}>{option}</Text>
+              <Text style={[styles.wheelUnit, active && styles.wheelUnitActive]}>{label}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
   );
 }
 
