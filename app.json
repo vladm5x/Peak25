@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Peak 25",
+    "slug": "peak-25-challenge",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#F4F2EB"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.vlad.peak25"
+    },
+    "android": {
+      "package": "com.vlad.peak25"
+    },
+    "web": {
+      "bundler": "metro",
+      "name": "Peak 25",
+      "shortName": "Peak 25",
+      "lang": "en"
+    }
+  }
+}

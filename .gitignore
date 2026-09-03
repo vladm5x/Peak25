@@ -1,0 +1,8 @@
+node_modules/
+.expo/
+dist/
+dist-web/
+web-build/
+.vercel/
+npm-debug.log*
+.DS_Store
