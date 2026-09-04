@@ -164,6 +164,16 @@ function AppIcon({
   color?: string;
   strokeWidth?: number;
 }) {
+  if (name === 'one') {
+    return (
+      <Text
+        allowFontScaling={false}
+        style={{ color, fontSize: size * 0.95, fontWeight: '900', lineHeight: size, textAlign: 'center', width: size }}
+      >
+        1
+      </Text>
+    );
+  }
   if (['gym', 'running', 'stairmaster', 'cycling', 'swimming', 'golf', 'tennis', 'padel', 'other'].includes(name)) {
     return <CustomActivityIcon name={name} size={size} color={color} strokeWidth={strokeWidth} />;
   }
@@ -1178,7 +1188,7 @@ function GroupScreen({ state }: { state: AppState }) {
 
 const rules = [
   { icon: 'calendar', title: '6/7 eligible days', copy: 'Complete one valid activity on at least 6/7 of eligible days across the whole period—not week by week.' },
-  { icon: 'minus', title: 'One activity per day', copy: 'Extra workouts on the same calendar day do not create extra credits.' },
+  { icon: 'one', title: 'One activity per day', copy: 'Extra workouts on the same calendar day do not create extra credits.' },
   { icon: 'legDay', title: 'Weekly leg day', copy: 'The goal climbs as weeks arrive: week 1 is 1/1, week 2 is 2/2, until all challenge weeks are due.' },
   { icon: 'edit', title: 'Quick logging', copy: 'Choose an activity, pick the date, and enter only the stats needed for that activity type.' },
   { icon: 'wellness', title: 'Medical exclusions', copy: 'Genuine injury or significant illness removes affected days. Work, travel, studies and fatigue do not.' },
