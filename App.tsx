@@ -278,15 +278,11 @@ function CustomActivityIcon({
   if (name === 'golf') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24">
-        <SvgCircle cx="8.6" cy="4.7" r="1.55" {...shapeProps} />
-        <Path d="M7.5 6.8l3.7 2.6 2.9-.8" {...lineProps} />
-        <Path d="M11.1 9.4l-2.2 4.7" {...lineProps} />
-        <Path d="M8.9 14.1l-3.5 4" {...lineProps} />
-        <Path d="M8.9 14.1l5.1 1.6" {...lineProps} />
-        <Path d="M14 8.6l6.4-4.5" {...lineProps} />
-        <Path d="M19.7 4.1l1.7-1.2" {...lineProps} />
-        <SvgCircle cx="20.8" cy="20.2" r="0.6" fill={color} />
-        <Path d="M3.5 21h12.5" {...lineProps} />
+        <SvgCircle cx="9.1" cy="7.5" r="2.05" fill={color} />
+        <Path d="M7.6 10.2a1.2 1.2 0 0 1 1-1.35l8.05-1.27-4.26-2.98a.72.72 0 0 1 .82-1.18l6.65 4.65c.83.58.55 1.88-.45 2.04l-8.35 1.54 1.65 6.1-2.28.98-1.92-7.1a1.18 1.18 0 0 1 .09-1.13z" fill={color} />
+        <Path d="M10.2 16.15 6.16 22a1.18 1.18 0 0 1-1.96-1.32l4.98-7.3 1.02 2.77z" fill={color} />
+        <Path d="M12.45 17.15a1.12 1.12 0 0 1 2.23.25l-.46 4.16a1.12 1.12 0 0 1-2.23-.25l.46-4.16z" fill={color} />
+        <Path d="M7.42 3.3a.78.78 0 0 1 1.08-.25l10.25 6.7a.78.78 0 1 1-.85 1.3L8.38 4.82l-.65 1a.78.78 0 1 1-1.31-.84l1-1.68z" fill={color} />
       </Svg>
     );
   }
