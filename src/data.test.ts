@@ -6,6 +6,7 @@ import {
   isoWeekKey,
   playerProgress,
   sportResultStats,
+  sportResultSetWins,
   sportResultTotalScores,
   upsertActivity,
   upsertSportResult,
@@ -149,7 +150,11 @@ function testSportResultStats() {
       sport: 'tennis',
       winnerId: 'vlad',
       participantIds: ['vlad', 'simon'],
-      scores: { vlad: 7, simon: 5 },
+      scores: { vlad: 12, simon: 7 },
+      rounds: [
+        { id: 'set-1', label: 'Set 1', scores: { vlad: 6, simon: 4 } },
+        { id: 'set-2', label: 'Set 2', scores: { vlad: 6, simon: 3 } },
+      ],
     },
     {
       id: 'padel-2',
@@ -164,7 +169,10 @@ function testSportResultStats() {
   assert(stats.standings[0]?.playerId === 'simon', 'Most wins should lead the sport-result standings');
   assert(stats.standings[0]?.wins === 2, 'Simon should have two wins');
   assert(sportResultTotalScores(results[0]!).simon === 12, 'Detailed round scores should sum into a total score');
-  assert(stats.standings.find((entry) => entry.playerId === 'vlad')?.points === 14, 'Player points should sum detailed rounds plus flat score entries');
+  assert(stats.standings.find((entry) => entry.playerId === 'vlad')?.points === 19, 'Player points should sum detailed rounds plus flat score entries');
+  assert(sportResultSetWins(results[1]!).vlad === 2, 'Tennis set wins should count the higher score in each set');
+  assert(stats.standings.find((entry) => entry.playerId === 'vlad')?.gamesWon === 12, 'Tennis games should be included in player totals');
+  assert(stats.standings.find((entry) => entry.playerId === 'vlad')?.setsWon === 2, 'Tennis sets should be included in player totals');
   assert(stats.bySport.find((entry) => entry.sport.id === 'padel')?.leaderId === 'simon', 'Per-sport leader should be calculated from wins');
 }
 

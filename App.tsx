@@ -81,6 +81,7 @@ import {
   isoWeekKey,
   parseDate,
   playerProgress,
+  sportResultSetWins,
   sportResultDefinitions,
   sportResultStats,
   sportResultTotalScores,
@@ -573,6 +574,21 @@ const totalDraftScores = (rounds: ScoreRoundDraft[], participantIds: PlayerId[])
     return totals;
   }, {});
 
+const totalDraftSetWins = (rounds: ScoreRoundDraft[], participantIds: PlayerId[]) =>
+  rounds.reduce<Partial<Record<PlayerId, number>>>((wins, round) => {
+    const entries = participantIds.map((playerId) => ({ playerId, raw: round.scores[playerId] }))
+      .filter((entry) => Boolean(entry.raw?.trim()) && Number.isFinite(Number(entry.raw)));
+    const scores = entries.map((entry) => Number(entry.raw));
+    if (scores.length < 2) return wins;
+    const highest = Math.max(...scores);
+    const winnerIndex = scores.findIndex((score) => score === highest);
+    if (scores.filter((score) => score === highest).length === 1) {
+      const winnerId = entries[winnerIndex]?.playerId;
+      if (winnerId) wins[winnerId] = (wins[winnerId] ?? 0) + 1;
+    }
+    return wins;
+  }, {});
+
 function ScoreEditor({
   sport,
   players,
@@ -601,6 +617,7 @@ function ScoreEditor({
   const roundName = scoreRoundLabel(sport);
   const selectedPlayers = players.filter((player) => participantIds.includes(player.id));
   const totals = totalDraftScores(rounds, participantIds);
+  const setWins = totalDraftSetWins(rounds, participantIds);
 
   const toggleParticipant = (playerId: PlayerId) => {
     const next = participantIds.includes(playerId)
@@ -702,7 +719,7 @@ function ScoreEditor({
 
           <View style={styles.scoreTotalsRow}>
             {selectedPlayers.map((player) => (
-              <Text key={player.id} style={styles.scoreTotalText}>{player.name}: {totals[player.id] ?? 0}</Text>
+              <Text key={player.id} style={styles.scoreTotalText}>{player.name}: {sport === 'tennis' ? `${setWins[player.id] ?? 0} sets · ${totals[player.id] ?? 0} games` : totals[player.id] ?? 0}</Text>
             ))}
           </View>
         </View>
@@ -1591,7 +1608,7 @@ function StatisticsScreen({ state, accentColor }: { state: AppState; accentColor
         <Header eyebrow="MATCH RESULTS" title="Statistics" />
         <View style={styles.statsHero}>
           <View>
-            <Text style={styles.heroLabel}>MOST WINS</Text>
+            <Text style={styles.heroLabel}>MOST MATCH WINS</Text>
             <Text style={styles.statsHeroName}>{leaderPlayer ? leaderPlayer.name : 'No games yet'}</Text>
             <Text style={styles.statsHeroMeta}>{leader ? `${leader.wins} wins from ${leader.played} games` : 'Log the first result to start the table'}</Text>
           </View>
@@ -1615,7 +1632,7 @@ function StatisticsScreen({ state, accentColor }: { state: AppState; accentColor
                     <Text style={styles.paceText}>{entry.played ? `${Math.round((entry.wins / entry.played) * 100)}% WIN RATE` : 'NO GAMES'}</Text>
                   </View>
                   <ProgressBar value={stats.totalResults ? entry.wins / Math.max(1, stats.totalResults) : 0} color={player.color} track="#ECEAE4" />
-                  <Text style={styles.rankMeta}>{entry.wins} wins · {entry.played} played · {entry.points} points scored</Text>
+                  <Text style={styles.rankMeta}>{entry.wins} match wins · {entry.points} points · {entry.setsWon} tennis sets · {entry.gamesWon} tennis games</Text>
                 </View>
                 <Text style={styles.rankPercent}>{entry.wins}</Text>
               </View>
@@ -1632,7 +1649,13 @@ function StatisticsScreen({ state, accentColor }: { state: AppState; accentColor
             <View key={entry.sport.id} style={styles.sportStatCard}>
               <View style={[styles.activityChoiceIcon, { backgroundColor: entry.sport.color }]}><AppIcon name={entry.sport.icon} size={19} color={C.ink} /></View>
               <Text style={styles.activityRuleName}>{entry.sport.label}</Text>
-              <Text style={styles.activityRuleCopy}>{entry.played ? `${playerName(entry.leaderId)} leads with ${entry.leaderWins}` : 'No results yet'}</Text>
+              <Text style={styles.activityRuleCopy}>
+                {entry.played
+                  ? entry.sport.id === 'tennis'
+                    ? `${playerName(entry.leaderId)}: ${entry.leaderWins} matches · ${playerName(entry.setLeaderId)}: ${entry.setLeaderWins} sets · ${playerName(entry.gameLeaderId)}: ${entry.gameLeaderWins} games`
+                    : `${playerName(entry.leaderId)} leads with ${entry.leaderWins}`
+                  : 'No results yet'}
+              </Text>
             </View>
           ))}
         </View>
@@ -1650,12 +1673,15 @@ function StatisticsScreen({ state, accentColor }: { state: AppState; accentColor
           ) : latestResults.map((result, index) => {
             const definition = activityDefinitions.find((item) => item.id === result.sport);
             const totalScores = sportResultTotalScores(result);
+            const setWins = sportResultSetWins(result);
             const roundScoreText = result.rounds?.length
               ? result.rounds
                 .map((round) => result.participantIds.map((playerId) => round.scores[playerId] ?? '-').join('-'))
                 .join(', ')
               : '';
-            const scoreText = roundScoreText || result.participantIds
+            const scoreText = result.sport === 'tennis' && result.rounds?.length
+              ? `${result.participantIds.map((playerId) => `${playerName(playerId)} ${setWins[playerId] ?? 0} sets · ${totalScores[playerId] ?? 0} games`).join(' · ')}${roundScoreText ? ` (${roundScoreText})` : ''}`
+              : roundScoreText || result.participantIds
               .map((playerId) => `${playerName(playerId)} ${totalScores[playerId] ?? '-'}`)
               .join(' · ');
             return (

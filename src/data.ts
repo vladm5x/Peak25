@@ -173,12 +173,31 @@ export function sportResultTotalScores(result: SportResult) {
   }, {});
 }
 
+export function sportResultSetWins(result: SportResult) {
+  if (result.sport !== 'tennis' || !result.rounds?.length) return {};
+  return result.rounds.reduce<Partial<Record<PlayerId, number>>>((wins, round) => {
+    const scores = result.participantIds.map((playerId) => ({
+      playerId,
+      score: round.scores[playerId],
+    })).filter((entry) => typeof entry.score === 'number' && Number.isFinite(entry.score));
+    if (scores.length < 2) return wins;
+    const highest = Math.max(...scores.map((entry) => entry.score as number));
+    const winners = scores.filter((entry) => entry.score === highest);
+    if (winners.length === 1) {
+      wins[winners[0]!.playerId] = (wins[winners[0]!.playerId] ?? 0) + 1;
+    }
+    return wins;
+  }, {});
+}
+
 export function sportResultStats(state: AppState) {
   const byPlayer = new Map<PlayerId, {
     playerId: PlayerId;
     played: number;
     wins: number;
     points: number;
+    gamesWon: number;
+    setsWon: number;
     sportWins: Partial<Record<ActivityType, number>>;
   }>();
 
@@ -188,6 +207,8 @@ export function sportResultStats(state: AppState) {
       played: 0,
       wins: 0,
       points: 0,
+      gamesWon: 0,
+      setsWon: 0,
       sportWins: {},
     });
   });
@@ -199,6 +220,8 @@ export function sportResultStats(state: AppState) {
       if (!entry) return;
       entry.played += 1;
       entry.points += totalScores[playerId] ?? 0;
+      if (result.sport === 'tennis') entry.gamesWon += totalScores[playerId] ?? 0;
+      entry.setsWon += sportResultSetWins(result)[playerId] ?? 0;
     });
 
     const winner = byPlayer.get(result.winnerId);
@@ -212,13 +235,27 @@ export function sportResultStats(state: AppState) {
   const bySport = sportResultDefinitions.map((sport) => {
     const results = state.sportResults.filter((result) => result.sport === sport.id);
     const wins = new Map<PlayerId, number>();
-    results.forEach((result) => wins.set(result.winnerId, (wins.get(result.winnerId) ?? 0) + 1));
+    const sets = new Map<PlayerId, number>();
+    const games = new Map<PlayerId, number>();
+    results.forEach((result) => {
+      wins.set(result.winnerId, (wins.get(result.winnerId) ?? 0) + 1);
+      const setWins = sportResultSetWins(result);
+      Object.entries(setWins).forEach(([playerId, count]) => sets.set(playerId as PlayerId, (sets.get(playerId as PlayerId) ?? 0) + (count ?? 0)));
+      const gameScores = sportResultTotalScores(result);
+      Object.entries(gameScores).forEach(([playerId, count]) => games.set(playerId as PlayerId, (games.get(playerId as PlayerId) ?? 0) + (count ?? 0)));
+    });
     const leader = [...wins.entries()].sort((a, b) => b[1] - a[1])[0];
+    const setLeader = [...sets.entries()].sort((a, b) => b[1] - a[1])[0];
+    const gameLeader = [...games.entries()].sort((a, b) => b[1] - a[1])[0];
     return {
       sport,
       played: results.length,
       leaderId: leader?.[0],
       leaderWins: leader?.[1] ?? 0,
+      setLeaderId: setLeader?.[0],
+      setLeaderWins: setLeader?.[1] ?? 0,
+      gameLeaderId: gameLeader?.[0],
+      gameLeaderWins: gameLeader?.[1] ?? 0,
     };
   });
 
