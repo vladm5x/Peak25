@@ -40,6 +40,28 @@ For a browser preview, run `npm run web`.
 
 ## Run with shared device sync
 
+### Supabase cloud sync
+
+For tracking across phones and computers from anywhere, use a free Supabase project.
+
+1. Create a free Supabase project.
+2. Open the Supabase SQL Editor and run `supabase/peak25_schema.sql`.
+3. Add your project values to `.env`:
+
+```powershell
+EXPO_PUBLIC_SUPABASE_URL="https://your-project-ref.supabase.co"
+EXPO_PUBLIC_SUPABASE_ANON_KEY="your-public-anon-or-publishable-key"
+```
+
+Use the public anon/publishable key only. Do not put a Supabase service-role key in the app.
+
+For GitHub Pages, add these as repository variables before deploying:
+
+- `EXPO_PUBLIC_SUPABASE_URL`
+- `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+
+### Local computer sync fallback
+
 Open two terminals on the development computer:
 
 ```powershell
@@ -50,6 +72,8 @@ npm.cmd run web
 The website runs on `http://localhost:8081` and the sync API runs on `http://localhost:8787`.
 Devices on the same Wi-Fi should open the computer's LAN address instead, for example `http://192.168.1.98:8081`.
 The app automatically talks to the same host on port `8787`, so activity and exclusion records are stored in `data/shared-sync-state.json` and shared across devices while the sync server is running.
+
+If Supabase variables are present, the app uses Supabase instead of this local fallback.
 
 For Expo Go/native testing, set `EXPO_PUBLIC_SYNC_URL` to the computer's LAN sync URL before starting Expo:
 
@@ -88,6 +112,7 @@ npm.cmd run build:web
 - Compact rules reference based on the signed contract
 - Google Sheet import for previous activity days
 - Offline storage on the device
+- Supabase cloud sync support
 - Haptic feedback on iPhone
 
 ## Contract model
@@ -100,13 +125,11 @@ npm.cmd run build:web
 
 ## Next development milestone
 
-The prototype stores data locally, so entries do not yet synchronize between four phones. The next milestone is a shared Supabase backend with:
+Supabase sync is wired without accounts so the shared website can stay simple. A stricter production setup would add:
 
 - Apple/email sign-in
 - One account mapped to each participant
-- Live activity and exclusion synchronization
 - Group approval for medical exclusions
 - Audit history so records cannot be silently changed
-- Broader spreadsheet import for historical entries
 
 Core rules and calculations live in `src/data.ts`, separate from the interface, so backend sync and Excel import can be added without rebuilding the screens.

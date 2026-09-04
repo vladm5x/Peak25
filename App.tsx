@@ -85,7 +85,7 @@ import {
   withSeedActivities,
 } from './src/data';
 import { seedImportMeta } from './src/seedData';
-import { fetchRemoteState, pushRemoteState, sharedSnapshot, syncUrl } from './src/sync';
+import { fetchRemoteState, pushRemoteState, sharedSnapshot, syncLabel, syncUrl } from './src/sync';
 import { Activity, ActivityType, AppState, Player, PlayerId } from './src/types';
 
 const C = {
@@ -164,7 +164,7 @@ function AppIcon({
   color?: string;
   strokeWidth?: number;
 }) {
-  if (['gym', 'legDay', 'running', 'stairmaster', 'cycling', 'swimming', 'golf', 'tennis', 'padel', 'other'].includes(name)) {
+  if (['gym', 'running', 'stairmaster', 'cycling', 'swimming', 'golf', 'tennis', 'padel', 'other'].includes(name)) {
     return <CustomActivityIcon name={name} size={size} color={color} strokeWidth={strokeWidth} />;
   }
   const Icon = iconMap[name] ?? CircleIcon;
@@ -182,50 +182,44 @@ function CustomActivityIcon({
   color: string;
   strokeWidth: number;
 }) {
+  const iconStroke = Math.min(strokeWidth, 1.9);
+  const detailStroke = Math.max(1.25, iconStroke - 0.35);
   const lineProps = {
     stroke: color,
-    strokeWidth,
+    strokeWidth: iconStroke,
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
     fill: 'none',
   };
-
-  if (name === 'stairmaster') {
-    return (
-      <Svg width={size} height={size} viewBox="0 0 24 24">
-        <Path d="M4 19h5v-4h5v-4h6" {...lineProps} />
-        <Path d="M15 7h5v12" {...lineProps} />
-        <SvgCircle cx="8" cy="6" r="2" fill="none" stroke={color} strokeWidth={strokeWidth} />
-        <Path d="M8 8l3 3 2-2" {...lineProps} />
-        <Path d="M9 12l-2 3" {...lineProps} />
-      </Svg>
-    );
-  }
+  const detailProps = {
+    ...lineProps,
+    strokeWidth: detailStroke,
+  };
+  const shapeProps = {
+    ...lineProps,
+    fill: '#FFFFFF',
+  };
 
   if (name === 'gym') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24">
-        <Line x1="3" y1="7" x2="21" y2="7" {...lineProps} />
-        <Line x1="4.2" y1="5.2" x2="4.2" y2="8.8" {...lineProps} />
-        <Line x1="19.8" y1="5.2" x2="19.8" y2="8.8" {...lineProps} />
-        <SvgCircle cx="12" cy="4" r="1.7" fill="none" stroke={color} strokeWidth={strokeWidth} />
-        <Path d="M8 9l4-2 4 2" {...lineProps} />
-        <Path d="M12 7v6" {...lineProps} />
-        <Path d="M12 13l-3 5" {...lineProps} />
-        <Path d="M12 13l3 5" {...lineProps} />
+        <Line x1="6.4" y1="12" x2="17.6" y2="12" {...lineProps} />
+        <Rect x="2.6" y="8.7" width="2.6" height="6.6" rx="0.8" {...shapeProps} />
+        <Rect x="5.2" y="7.6" width="2.2" height="8.8" rx="0.8" {...shapeProps} />
+        <Rect x="16.6" y="7.6" width="2.2" height="8.8" rx="0.8" {...shapeProps} />
+        <Rect x="18.8" y="8.7" width="2.6" height="6.6" rx="0.8" {...shapeProps} />
       </Svg>
     );
   }
 
-  if (name === 'legDay') {
+  if (name === 'stairmaster') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24">
-        <Line x1="5" y1="8" x2="19" y2="8" {...lineProps} />
-        <SvgCircle cx="11" cy="5" r="1.7" fill="none" stroke={color} strokeWidth={strokeWidth} />
-        <Path d="M8 10l3-2 3 2" {...lineProps} />
-        <Path d="M11 8v5" {...lineProps} />
-        <Path d="M11 13l-4 2.5 2.5 3.5" {...lineProps} />
-        <Path d="M11 13l4.5 2.5L17 20" {...lineProps} />
+        <Path d="M4 18.5h4.2v-3.4h4.2v-3.4h4.2V8.3H20" {...lineProps} />
+        <Path d="M18.7 5.5v13" {...lineProps} />
+        <Path d="M5.7 18.5L8.2 7.2h10.5" {...lineProps} />
+        <Path d="M9.1 7.2l1.9 3.2" {...detailProps} />
+        <Path d="M3.5 21h17" {...lineProps} />
       </Svg>
     );
   }
@@ -233,12 +227,10 @@ function CustomActivityIcon({
   if (name === 'running') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24">
-        <SvgCircle cx="12.5" cy="4.2" r="1.8" fill="none" stroke={color} strokeWidth={strokeWidth} />
-        <Path d="M11.5 6.5l-2.7 4 4.4 1.7" {...lineProps} />
-        <Path d="M9.5 10.2l-3.3 1" {...lineProps} />
-        <Path d="M13.2 12.2l3.7-1.2" {...lineProps} />
-        <Path d="M12.8 12.2l-2.4 3.6-4 2" {...lineProps} />
-        <Path d="M12.8 12.2l3.3 3.2 2.9 3.3" {...lineProps} />
+        <Path d="M3.7 14.8c2.7.5 5-.2 6.8-2.1l1.3-1.4 2.4 2.2c1 .9 2.5 1.4 4.4 1.4h1.7v2.3c0 1-.8 1.8-1.8 1.8H6.4c-1.8 0-3.2-.9-3.9-2.4l-.3-.6c-.2-.6.5-1.4 1.5-1.2z" {...shapeProps} />
+        <Path d="M9.8 13.3l1.7 1.4" {...detailProps} />
+        <Path d="M12 12.2l1.7 1.5" {...detailProps} />
+        <Path d="M5.1 19.1h13.7" {...detailProps} />
       </Svg>
     );
   }
@@ -246,13 +238,12 @@ function CustomActivityIcon({
   if (name === 'cycling') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24">
-        <SvgCircle cx="6.5" cy="17" r="3" fill="none" stroke={color} strokeWidth={strokeWidth} />
-        <SvgCircle cx="17.5" cy="17" r="3" fill="none" stroke={color} strokeWidth={strokeWidth} />
-        <Path d="M6.5 17l3.8-6h4.2l3 6" {...lineProps} />
-        <Path d="M10.3 11l2.7 6H6.5" {...lineProps} />
-        <SvgCircle cx="12.2" cy="5" r="1.7" fill="none" stroke={color} strokeWidth={strokeWidth} />
-        <Path d="M12 7l-1.7 4" {...lineProps} />
-        <Path d="M10.3 11l5.2 1.2" {...lineProps} />
+        <SvgCircle cx="6.7" cy="16.7" r="3.2" {...shapeProps} />
+        <SvgCircle cx="17.5" cy="16.7" r="3.2" {...shapeProps} />
+        <Path d="M6.7 16.7l4-6h3.5l3.3 6H12l-1.3-6" {...lineProps} />
+        <Path d="M12 16.7l2.2-6" {...lineProps} />
+        <Path d="M13.8 10.7l1.2-2.4h2.4" {...detailProps} />
+        <Path d="M9.4 8.3h3.1" {...detailProps} />
       </Svg>
     );
   }
@@ -260,11 +251,11 @@ function CustomActivityIcon({
   if (name === 'swimming') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24">
-        <SvgCircle cx="9" cy="7" r="1.9" fill="none" stroke={color} strokeWidth={strokeWidth} />
-        <Path d="M11 8l5 3.2" {...lineProps} />
-        <Path d="M16 11.2l3.5-1.6" {...lineProps} />
-        <Path d="M3.5 15c2 0 2-1.1 4-1.1s2 1.1 4 1.1 2-1.1 4-1.1 2 1.1 4 1.1" {...lineProps} />
-        <Path d="M3.5 19c2 0 2-1.1 4-1.1s2 1.1 4 1.1 2-1.1 4-1.1 2 1.1 4 1.1" {...lineProps} />
+        <SvgCircle cx="15.8" cy="6.1" r="1.6" {...shapeProps} />
+        <Path d="M4.9 12c2.7-2.6 6-2.9 9.8-.9l2.8 1.5" {...lineProps} />
+        <Path d="M11.5 9.8l-3.1 3.3" {...lineProps} />
+        <Path d="M3.6 16.2c1.8 0 1.8-1 3.6-1s1.8 1 3.6 1 1.8-1 3.6-1 1.8 1 3.6 1 1.8-1 3.6-1" {...lineProps} />
+        <Path d="M3.6 20c1.8 0 1.8-1 3.6-1s1.8 1 3.6 1 1.8-1 3.6-1 1.8 1 3.6 1 1.8-1 3.6-1" {...lineProps} />
       </Svg>
     );
   }
@@ -272,14 +263,14 @@ function CustomActivityIcon({
   if (name === 'tennis') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24">
-        <SvgCircle cx="9" cy="8" r="5" fill="none" stroke={color} strokeWidth={strokeWidth} />
-        <Line x1="5.7" y1="4.3" x2="12.3" y2="11.7" {...lineProps} />
-        <Line x1="12.3" y1="4.3" x2="5.7" y2="11.7" {...lineProps} />
-        <Line x1="9" y1="3" x2="9" y2="13" {...lineProps} />
-        <Line x1="4" y1="8" x2="14" y2="8" {...lineProps} />
-        <Path d="M12.6 11.6l6.2 6.2" {...lineProps} />
-        <Path d="M17.2 19.4l3.3-3.3" {...lineProps} />
-        <SvgCircle cx="18.8" cy="6.1" r="1.7" fill="none" stroke={color} strokeWidth={strokeWidth} />
+        <Path d="M12.8 4.4c2.2 2.1 2.1 5.9-.2 8.2s-6.1 2.5-8.3.3-2.1-5.9.2-8.2 6.1-2.5 8.3-.3z" {...shapeProps} />
+        <Path d="M12.5 12.4l6.3 6.3" {...lineProps} />
+        <Path d="M17.2 20.2l3-3" {...lineProps} />
+        <Path d="M5.6 6.2l5.6 5.6" {...detailProps} />
+        <Path d="M11.7 5.6l-6.4 6.4" {...detailProps} />
+        <Path d="M8.6 4.2l5.2 5.2" {...detailProps} />
+        <Path d="M4.2 8.8l5 5" {...detailProps} />
+        <SvgCircle cx="18.6" cy="5.8" r="1.45" {...shapeProps} />
       </Svg>
     );
   }
@@ -287,12 +278,15 @@ function CustomActivityIcon({
   if (name === 'golf') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24">
-        <Line x1="7" y1="4" x2="7" y2="18" {...lineProps} />
-        <Path d="M7 4h8.5l-2.4 2.4 2.4 2.4H7" {...lineProps} />
-        <Path d="M4.5 18.5c1.9 1 6.1 1 8 0" {...lineProps} />
-        <Path d="M14 18.2l4.7-11.8" {...lineProps} />
-        <Path d="M17.9 20.2c-2.9 0-4.8-.9-5.6-2.3" {...lineProps} />
-        <SvgCircle cx="20" cy="18.4" r="1" fill={color} />
+        <SvgCircle cx="8.6" cy="4.7" r="1.55" {...shapeProps} />
+        <Path d="M7.5 6.8l3.7 2.6 2.9-.8" {...lineProps} />
+        <Path d="M11.1 9.4l-2.2 4.7" {...lineProps} />
+        <Path d="M8.9 14.1l-3.5 4" {...lineProps} />
+        <Path d="M8.9 14.1l5.1 1.6" {...lineProps} />
+        <Path d="M14 8.6l6.4-4.5" {...lineProps} />
+        <Path d="M19.7 4.1l1.7-1.2" {...lineProps} />
+        <SvgCircle cx="20.8" cy="20.2" r="0.6" fill={color} />
+        <Path d="M3.5 21h12.5" {...lineProps} />
       </Svg>
     );
   }
@@ -300,29 +294,23 @@ function CustomActivityIcon({
   if (name === 'padel') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24">
-        <SvgCircle cx="7.5" cy="5" r="1.8" fill="none" stroke={color} strokeWidth={strokeWidth} />
-        <Path d="M8 7l2.6 4.2" {...lineProps} />
-        <Path d="M10.6 11.2l-3.4 3.2" {...lineProps} />
-        <Path d="M10.6 11.2l3.7 4.1" {...lineProps} />
-        <Path d="M10 9.1l4.3-2.4" {...lineProps} />
-        <Rect x="14" y="4" width="5.4" height="7.8" rx="2.4" transform="rotate(-24 16.7 7.9)" {...lineProps} />
-        <Line x1="16.7" y1="11.2" x2="18.3" y2="15.1" {...lineProps} />
-        <SvgCircle cx="20" cy="18" r="1.5" fill="none" stroke={color} strokeWidth={strokeWidth} />
-        <SvgCircle cx="16" cy="6.8" r="0.45" fill={color} />
-        <SvgCircle cx="17.2" cy="8.7" r="0.45" fill={color} />
+        <Path d="M15.7 3.8c2.7 1.1 4 4.4 2.8 7.4s-4.5 4.6-7.2 3.5-4-4.4-2.8-7.4 4.5-4.6 7.2-3.5z" {...shapeProps} />
+        <Path d="M10.4 14.9l-3.1 5.3" {...lineProps} />
+        <Path d="M6.3 20.8l2.8 1.7" {...lineProps} />
+        <SvgCircle cx="12.3" cy="8.2" r="0.5" fill={color} />
+        <SvgCircle cx="14.7" cy="7.7" r="0.5" fill={color} />
+        <SvgCircle cx="11.9" cy="10.8" r="0.5" fill={color} />
+        <SvgCircle cx="14.2" cy="10.3" r="0.5" fill={color} />
+        <SvgCircle cx="19.9" cy="18" r="1.35" {...shapeProps} />
       </Svg>
     );
   }
 
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
-      <SvgCircle cx="8.5" cy="5" r="1.8" fill="none" stroke={color} strokeWidth={strokeWidth} />
-      <Path d="M8.5 7l2.2 5" {...lineProps} />
-      <Path d="M10.7 12l-3 3.5" {...lineProps} />
-      <Path d="M10.7 12l4.2 3.4" {...lineProps} />
-      <Path d="M10 9.5l4-2.3" {...lineProps} />
-      <SvgCircle cx="17.8" cy="6.8" r="2.1" fill="none" stroke={color} strokeWidth={strokeWidth} />
-      <Path d="M4 20h16" {...lineProps} />
+      <SvgCircle cx="12" cy="12" r="7.2" {...shapeProps} />
+      <Path d="M7.3 12h2.6l1.4-3.6 2.4 7.2 1.5-3.6h1.5" {...lineProps} />
+      <SvgCircle cx="18.8" cy="6.2" r="1.2" {...shapeProps} />
     </Svg>
   );
 }
@@ -994,6 +982,7 @@ function TodayScreen({ state, setState }: { state: AppState; setState: React.Dis
   const currentWeek = isoWeekKey(today);
   const legThisWeek = state.activities.some((item) => item.playerId === player.id && item.type === 'leg-day' && isoWeekKey(item.date) === currentWeek && isActivityValid(item));
   const todayActivity = state.activities.find((item) => item.playerId === player.id && item.date === today);
+  const todayDefinition = todayActivity ? activityDefinitions.find((item) => item.id === todayActivity.type) : undefined;
   const recentDates = elapsedChallengeDates().slice(-7).reverse();
 
   const saveActivity = (activity: Activity) => {
@@ -1037,9 +1026,16 @@ function TodayScreen({ state, setState }: { state: AppState; setState: React.Dis
 
         <View style={styles.todayCard}>
           <View style={styles.todayCardHeader}>
-            <View>
-              <Text style={styles.cardEyebrow}>TODAY · {displayDate(today).toUpperCase()}</Text>
-              <Text style={styles.todayTitle}>{status === 'complete' && todayActivity ? activityLabel(todayActivity.type) : status === 'excluded' ? 'Sickness / injury' : 'No activity yet'}</Text>
+            <View style={styles.todayTitleRow}>
+              {status === 'complete' && todayDefinition && (
+                <View style={[styles.todayActivityIcon, { backgroundColor: todayDefinition.color }]}>
+                  <AppIcon name={todayDefinition.icon} size={23} color={C.ink} />
+                </View>
+              )}
+              <View style={styles.todayTitleText}>
+                <Text style={styles.cardEyebrow}>TODAY · {displayDate(today).toUpperCase()}</Text>
+                <Text style={styles.todayTitle}>{status === 'complete' && todayActivity ? activityLabel(todayActivity.type) : status === 'excluded' ? 'Sickness / injury' : 'No activity yet'}</Text>
+              </View>
             </View>
             <StatusPill status={status} />
           </View>
@@ -1317,7 +1313,7 @@ function AppContent() {
   const [remoteReady, setRemoteReady] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({
     state: syncUrl ? 'connecting' : 'offline',
-    message: syncUrl ? 'Connecting to shared sync server' : 'No shared sync server configured',
+    message: syncUrl ? `Connecting to ${syncLabel}` : 'No shared sync configured',
   });
   const clientIdRef = useRef<string>('');
   const revisionRef = useRef(0);
@@ -1352,7 +1348,7 @@ function AppContent() {
         });
       }
     } catch {
-      setSyncStatus({ state: 'offline', message: 'Shared sync server is offline' });
+      setSyncStatus({ state: 'offline', message: `${syncLabel} is offline` });
     } finally {
       setRemoteReady(true);
     }
@@ -1393,7 +1389,7 @@ function AppContent() {
     const snapshot = sharedSnapshot(state);
     if (snapshot === lastSyncedSnapshotRef.current) return undefined;
 
-    setSyncStatus({ state: 'saving', message: 'Saving group changes' });
+    setSyncStatus({ state: 'saving', message: `Saving group changes to ${syncLabel}` });
     if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
     pushTimerRef.current = setTimeout(() => {
       pushRemoteState(
@@ -1402,7 +1398,7 @@ function AppContent() {
         clientIdRef.current,
       )
         .then(applyRemoteState)
-        .catch(() => setSyncStatus({ state: 'offline', message: 'Saved locally, sync server offline' }));
+        .catch(() => setSyncStatus({ state: 'offline', message: `Saved locally, ${syncLabel} offline` }));
     }, 700);
 
     return () => {
@@ -1455,6 +1451,9 @@ const styles = StyleSheet.create({
   heroFooterText: { color: '#A7B2AE', fontSize: 10, fontWeight: '700' },
   todayCard: { backgroundColor: C.card, borderRadius: 24, padding: 18, marginTop: 12 },
   todayCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  todayTitleRow: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10, paddingRight: 10 },
+  todayTitleText: { flex: 1, minWidth: 0 },
+  todayActivityIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   cardEyebrow: { color: C.muted, fontSize: 9, fontWeight: '800', letterSpacing: 1.1, marginBottom: 5 },
   todayTitle: { color: C.ink, fontSize: 21, fontWeight: '900', letterSpacing: -0.4 },
   todayCopy: { color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 10 },

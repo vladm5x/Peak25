@@ -7,7 +7,8 @@ This app is configured to deploy like the current `imotive.se` website: a static
 - `public/CNAME` contains `imotive.se`.
 - `public/.nojekyll` keeps GitHub Pages from ignoring the Expo `_expo` asset folder.
 - `.github/workflows/deploy-github-pages.yml` builds `npm run build:web` and publishes `dist-web` to GitHub Pages.
-- The workflow passes the optional repository variable `EXPO_PUBLIC_SYNC_URL` into the web build. Set that variable when a hosted sync API is available.
+- The workflow passes Supabase repository variables into the web build when they are configured: `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`.
+- The older local sync API variable `EXPO_PUBLIC_SYNC_URL` is still supported as a fallback.
 
 ## GitHub setup
 
@@ -20,7 +21,12 @@ This app is configured to deploy like the current `imotive.se` website: a static
 ## Sync note
 
 GitHub Pages only hosts static files, so it cannot run `scripts/sync-server.cjs`.
-The deployed site will work as a local tracker by default. For shared tracking across devices from the public site, host the sync API separately or replace it with Supabase/Firebase, then add that API URL as the repository variable `EXPO_PUBLIC_SYNC_URL` before deploying.
+For shared tracking across devices from the public site, create a free Supabase project, run `supabase/peak25_schema.sql` in the Supabase SQL Editor, then add these GitHub repository variables before deploying:
+
+- `EXPO_PUBLIC_SUPABASE_URL`
+- `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+
+Use the public anon/publishable key only. Never expose a Supabase service-role key in GitHub Pages.
 
 ## Domain handoff
 
