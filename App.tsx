@@ -1394,7 +1394,8 @@ function TodayScreen({ state, setState, accentColor }: { state: AppState; setSta
   const progress = playerProgress(state, player.id);
   const currentWeek = isoWeekKey(today);
   const legThisWeek = state.activities.some((item) => item.playerId === player.id && item.type === 'leg-day' && isoWeekKey(item.date) === currentWeek && isActivityValid(item));
-  const todayActivity = state.activities.find((item) => item.playerId === player.id && item.date === today);
+  const todayActivities = state.activities.filter((item) => item.playerId === player.id && item.date === today);
+  const todayActivity = todayActivities.find((item) => isActivityValid(item));
   const todayDefinition = todayActivity ? activityDefinitions.find((item) => item.id === todayActivity.type) : undefined;
   const recentDates = elapsedChallengeDates().slice(-7).reverse();
 
@@ -1455,7 +1456,7 @@ function TodayScreen({ state, setState, accentColor }: { state: AppState; setSta
           </View>
           {status === 'open' ? (
             <>
-              <Text style={styles.todayCopy}>Log one qualifying activity. Only one can count today.</Text>
+              <Text style={styles.todayCopy}>Log one or more qualifying activities. The day counts once toward the challenge.</Text>
               <Pressable style={[styles.primaryAction, { backgroundColor: accentColor }]} onPress={() => setLogMode('activity')}>
                 <AppIcon name="add" size={20} color={C.ink} />
                 <Text style={styles.primaryActionText}>Log today’s activity</Text>
@@ -1467,10 +1468,10 @@ function TodayScreen({ state, setState, accentColor }: { state: AppState; setSta
             </>
           ) : (
             <>
-              <Text style={styles.todayCopy}>{status === 'complete' && todayActivity ? activitySummary(todayActivity) : 'This day has been removed from the eligible-day denominator.'}</Text>
+              <Text style={styles.todayCopy}>{status === 'complete' && todayActivity ? `${todayActivities.length} activities logged today. ${activitySummary(todayActivity)}` : 'This day has been removed from the eligible-day denominator.'}</Text>
               <Pressable style={styles.secondaryAction} onPress={() => setLogMode(status === 'complete' ? 'activity' : 'exclusion')}>
-                <AppIcon name="edit" size={17} color={C.ink} />
-                <Text style={styles.secondaryActionText}>Edit today’s record</Text>
+                <AppIcon name="add" size={17} color={C.ink} />
+                <Text style={styles.secondaryActionText}>Add another activity</Text>
               </Pressable>
             </>
           )}
@@ -1511,7 +1512,8 @@ function TodayScreen({ state, setState, accentColor }: { state: AppState; setSta
         <View style={styles.timelineCard}>
           {recentDates.map((date, index) => {
             const dayStatus = todaysStatus(state, player.id, date);
-            const activity = state.activities.find((item) => item.playerId === player.id && item.date === date);
+            const dayActivities = state.activities.filter((item) => item.playerId === player.id && item.date === date);
+            const activity = dayActivities.find((item) => isActivityValid(item));
             return (
               <View key={date} style={[styles.timelineRow, index > 0 && styles.timelineBorder]}>
                 <View style={[styles.timelineIcon, dayStatus === 'complete' ? styles.timelineComplete : dayStatus === 'excluded' ? styles.timelineExcluded : styles.timelineOpen]}>
@@ -1519,7 +1521,7 @@ function TodayScreen({ state, setState, accentColor }: { state: AppState; setSta
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.timelineDate}>{displayDate(date)}</Text>
-                  <Text style={styles.timelineDetail}>{activity ? `${activityLabel(activity.type)} · ${activitySummary(activity)}` : dayStatus === 'excluded' ? 'Approved exclusion' : 'Open day'}</Text>
+                  <Text style={styles.timelineDetail}>{activity ? `${dayActivities.length > 1 ? `${dayActivities.length} activities · ` : ''}${activityLabel(activity.type)} · ${activitySummary(activity)}` : dayStatus === 'excluded' ? 'Approved exclusion' : 'Open day'}</Text>
                 </View>
                 <Text style={styles.timelineState}>{dayStatus === 'complete' ? 'COUNTED' : dayStatus === 'excluded' ? 'REMOVED' : 'OPEN'}</Text>
               </View>

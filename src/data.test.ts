@@ -89,8 +89,8 @@ function testOneActivityPerDay() {
   const replacement = activity('2026-09-01', { type: 'running', distanceKm: 5 });
   const activities = upsertActivity(upsertActivity([], first), replacement);
   const progress = playerProgress(stateFor(activities), 'vlad');
-  assert(activities.length === 1, 'Replacing the same participant/date should keep one activity');
-  assert(activities[0]?.type === 'running', 'The later activity should replace the earlier one');
+  assert(activities.length === 2, 'A participant can record multiple activities on the same date');
+  assert(activities.some((item) => item.type === 'gym') && activities.some((item) => item.type === 'running'), 'Same-day activities should both be retained');
   assert(progress.activityDays === 1, 'One date should count once even after replacement');
 }
 

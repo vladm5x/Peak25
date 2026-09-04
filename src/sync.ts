@@ -17,7 +17,7 @@ type SupabaseDailyRecord = {
   player_id: PlayerId;
   record_date: string;
   record_type: 'activity' | 'exclusion';
-  payload: Activity | Exclusion;
+  payload: Activity | Exclusion | { activities: Activity[] };
   updated_at: string;
 };
 
@@ -76,11 +76,12 @@ const rowsToRemoteState = (rows: SupabaseDailyRecord[], resultRows: SupabaseSpor
   rows.forEach((row) => {
     if (!latestUpdatedAt || row.updated_at > latestUpdatedAt) latestUpdatedAt = row.updated_at;
     if (row.record_type === 'activity') {
-      activities.push({
-        ...(row.payload as Activity),
-        playerId: row.player_id,
-        date: row.record_date,
-      });
+      const batchedActivities = (row.payload as { activities?: Activity[] }).activities;
+      if (batchedActivities) {
+        batchedActivities.forEach((activity) => activities.push({ ...activity, playerId: row.player_id, date: row.record_date }));
+      } else {
+        activities.push({ ...(row.payload as Activity), playerId: row.player_id, date: row.record_date });
+      }
     } else {
       exclusions.push({
         ...(row.payload as Exclusion),
@@ -118,15 +119,20 @@ const stateToRows = (state: SharedChallengeState): SupabaseDailyRecord[] => {
   const updatedAt = new Date().toISOString();
   const rows = new Map<string, SupabaseDailyRecord>();
 
+  const activitiesByDay = new Map<string, Activity[]>();
   state.activities.forEach((activity) => {
     const key = recordKey(activity);
+    activitiesByDay.set(key, [...(activitiesByDay.get(key) ?? []), activity]);
+  });
+  activitiesByDay.forEach((activities, key) => {
+    const first = activities[0]!;
     rows.set(key, {
       record_key: key,
       challenge_id: CHALLENGE_ID,
-      player_id: activity.playerId,
-      record_date: activity.date,
+      player_id: first.playerId,
+      record_date: first.date,
       record_type: 'activity',
-      payload: activity,
+      payload: { activities },
       updated_at: updatedAt,
     });
   });

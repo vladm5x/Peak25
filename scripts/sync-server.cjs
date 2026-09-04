@@ -46,18 +46,20 @@ function recordKey(record) {
 }
 
 function mergeRecords(current, incoming) {
-  const activities = new Map(current.activities.map((activity) => [recordKey(activity), activity]));
+  const activities = new Map(current.activities.map((activity) => [activity.id || recordKey(activity), activity]));
   const exclusions = new Map(current.exclusions.map((exclusion) => [recordKey(exclusion), exclusion]));
   const sportResults = new Map((current.sportResults || []).map((result) => [result.id, result]));
 
   for (const activity of incoming.activities || []) {
-    activities.set(recordKey(activity), activity);
+    activities.set(activity.id || recordKey(activity), activity);
     exclusions.delete(recordKey(activity));
   }
 
   for (const exclusion of incoming.exclusions || []) {
     exclusions.set(recordKey(exclusion), exclusion);
-    activities.delete(recordKey(exclusion));
+    for (const [activityId, activity] of activities) {
+      if (recordKey(activity) === recordKey(exclusion)) activities.delete(activityId);
+    }
   }
 
   for (const result of incoming.sportResults || []) {

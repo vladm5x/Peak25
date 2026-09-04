@@ -128,9 +128,9 @@ export function playerProgress(state: AppState, playerId: PlayerId, today = toda
 }
 
 export function todaysStatus(state: AppState, playerId: PlayerId, date = todayWithinChallenge()) {
-  const activity = state.activities.find((item) => item.playerId === playerId && item.date === date);
+  const hasValidActivity = state.activities.some((item) => item.playerId === playerId && item.date === date && isActivityValid(item));
   const exclusion = state.exclusions.find((item) => item.playerId === playerId && item.date === date);
-  if (activity && isActivityValid(activity)) return 'complete' as const;
+  if (hasValidActivity) return 'complete' as const;
   if (exclusion) return 'excluded' as const;
   return 'open' as const;
 }
@@ -152,7 +152,7 @@ export function activityLabel(type: ActivityType) {
 }
 
 export function upsertActivity(activities: Activity[], activity: Activity) {
-  return [...activities.filter((item) => !(item.playerId === activity.playerId && item.date === activity.date)), activity];
+  return [...activities.filter((item) => item.id !== activity.id), activity].sort((a, b) => b.date.localeCompare(a.date));
 }
 
 export function upsertExclusion(exclusions: Exclusion[], exclusion: Exclusion) {
