@@ -32,6 +32,8 @@ jobs:
         run: npm ci
 
       - name: Build web app
+        env:
+          EXPO_PUBLIC_SYNC_URL: ${{ vars.EXPO_PUBLIC_SYNC_URL }}
         run: npm run build:web
 
       - name: Upload Pages artifact

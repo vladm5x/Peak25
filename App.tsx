@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity as PulseIcon,
   AlertCircle,
@@ -46,6 +46,8 @@ import type { LucideIcon } from 'lucide-react-native';
 import {
   LayoutAnimation,
   Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   Pressable,
   ScrollView,
@@ -83,6 +85,7 @@ import {
   withSeedActivities,
 } from './src/data';
 import { seedImportMeta } from './src/seedData';
+import { fetchRemoteState, pushRemoteState, sharedSnapshot, syncUrl } from './src/sync';
 import { Activity, ActivityType, AppState, Player, PlayerId } from './src/types';
 
 const C = {
@@ -100,6 +103,10 @@ const C = {
 
 type Tab = 'today' | 'group' | 'rules' | 'settings';
 type LogMode = 'activity' | 'exclusion' | null;
+type SyncStatus = {
+  state: 'connecting' | 'synced' | 'saving' | 'offline';
+  message: string;
+};
 
 const iconMap: Record<string, LucideIcon> = {
   activity: PulseIcon,
@@ -157,7 +164,7 @@ function AppIcon({
   color?: string;
   strokeWidth?: number;
 }) {
-  if (['stairmaster', 'tennis', 'golf', 'padel'].includes(name)) {
+  if (['gym', 'legDay', 'running', 'stairmaster', 'cycling', 'swimming', 'golf', 'tennis', 'padel', 'other'].includes(name)) {
     return <CustomActivityIcon name={name} size={size} color={color} strokeWidth={strokeWidth} />;
   }
   const Icon = iconMap[name] ?? CircleIcon;
@@ -195,15 +202,84 @@ function CustomActivityIcon({
     );
   }
 
+  if (name === 'gym') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Line x1="3" y1="7" x2="21" y2="7" {...lineProps} />
+        <Line x1="4.2" y1="5.2" x2="4.2" y2="8.8" {...lineProps} />
+        <Line x1="19.8" y1="5.2" x2="19.8" y2="8.8" {...lineProps} />
+        <SvgCircle cx="12" cy="4" r="1.7" fill="none" stroke={color} strokeWidth={strokeWidth} />
+        <Path d="M8 9l4-2 4 2" {...lineProps} />
+        <Path d="M12 7v6" {...lineProps} />
+        <Path d="M12 13l-3 5" {...lineProps} />
+        <Path d="M12 13l3 5" {...lineProps} />
+      </Svg>
+    );
+  }
+
+  if (name === 'legDay') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Line x1="5" y1="8" x2="19" y2="8" {...lineProps} />
+        <SvgCircle cx="11" cy="5" r="1.7" fill="none" stroke={color} strokeWidth={strokeWidth} />
+        <Path d="M8 10l3-2 3 2" {...lineProps} />
+        <Path d="M11 8v5" {...lineProps} />
+        <Path d="M11 13l-4 2.5 2.5 3.5" {...lineProps} />
+        <Path d="M11 13l4.5 2.5L17 20" {...lineProps} />
+      </Svg>
+    );
+  }
+
+  if (name === 'running') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <SvgCircle cx="12.5" cy="4.2" r="1.8" fill="none" stroke={color} strokeWidth={strokeWidth} />
+        <Path d="M11.5 6.5l-2.7 4 4.4 1.7" {...lineProps} />
+        <Path d="M9.5 10.2l-3.3 1" {...lineProps} />
+        <Path d="M13.2 12.2l3.7-1.2" {...lineProps} />
+        <Path d="M12.8 12.2l-2.4 3.6-4 2" {...lineProps} />
+        <Path d="M12.8 12.2l3.3 3.2 2.9 3.3" {...lineProps} />
+      </Svg>
+    );
+  }
+
+  if (name === 'cycling') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <SvgCircle cx="6.5" cy="17" r="3" fill="none" stroke={color} strokeWidth={strokeWidth} />
+        <SvgCircle cx="17.5" cy="17" r="3" fill="none" stroke={color} strokeWidth={strokeWidth} />
+        <Path d="M6.5 17l3.8-6h4.2l3 6" {...lineProps} />
+        <Path d="M10.3 11l2.7 6H6.5" {...lineProps} />
+        <SvgCircle cx="12.2" cy="5" r="1.7" fill="none" stroke={color} strokeWidth={strokeWidth} />
+        <Path d="M12 7l-1.7 4" {...lineProps} />
+        <Path d="M10.3 11l5.2 1.2" {...lineProps} />
+      </Svg>
+    );
+  }
+
+  if (name === 'swimming') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <SvgCircle cx="9" cy="7" r="1.9" fill="none" stroke={color} strokeWidth={strokeWidth} />
+        <Path d="M11 8l5 3.2" {...lineProps} />
+        <Path d="M16 11.2l3.5-1.6" {...lineProps} />
+        <Path d="M3.5 15c2 0 2-1.1 4-1.1s2 1.1 4 1.1 2-1.1 4-1.1 2 1.1 4 1.1" {...lineProps} />
+        <Path d="M3.5 19c2 0 2-1.1 4-1.1s2 1.1 4 1.1 2-1.1 4-1.1 2 1.1 4 1.1" {...lineProps} />
+      </Svg>
+    );
+  }
+
   if (name === 'tennis') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24">
-        <Path d="M14.7 4.4c2.7 2.7 3.1 6.5.9 8.7s-6 .8-8.7-1.9-3.1-6.5-.9-8.7 6-.8 8.7 1.9z" {...lineProps} />
-        <Line x1="6.7" y1="11" x2="3.5" y2="14.2" {...lineProps} />
-        <Path d="M3.5 14.2l-1.9 1.9 2.3 2.3 1.9-1.9" {...lineProps} />
-        <Path d="M8.2 3.3l7.9 7.9" {...lineProps} />
-        <Path d="M5.8 5.7l7.9 7.9" {...lineProps} />
-        <SvgCircle cx="18.5" cy="18.4" r="2.1" fill="none" stroke={color} strokeWidth={strokeWidth} />
+        <SvgCircle cx="9" cy="8" r="5" fill="none" stroke={color} strokeWidth={strokeWidth} />
+        <Line x1="5.7" y1="4.3" x2="12.3" y2="11.7" {...lineProps} />
+        <Line x1="12.3" y1="4.3" x2="5.7" y2="11.7" {...lineProps} />
+        <Line x1="9" y1="3" x2="9" y2="13" {...lineProps} />
+        <Line x1="4" y1="8" x2="14" y2="8" {...lineProps} />
+        <Path d="M12.6 11.6l6.2 6.2" {...lineProps} />
+        <Path d="M17.2 19.4l3.3-3.3" {...lineProps} />
+        <SvgCircle cx="18.8" cy="6.1" r="1.7" fill="none" stroke={color} strokeWidth={strokeWidth} />
       </Svg>
     );
   }
@@ -211,26 +287,42 @@ function CustomActivityIcon({
   if (name === 'golf') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24">
-        <SvgCircle cx="8" cy="5" r="1.8" fill="none" stroke={color} strokeWidth={strokeWidth} />
+        <Line x1="7" y1="4" x2="7" y2="18" {...lineProps} />
+        <Path d="M7 4h8.5l-2.4 2.4 2.4 2.4H7" {...lineProps} />
+        <Path d="M4.5 18.5c1.9 1 6.1 1 8 0" {...lineProps} />
+        <Path d="M14 18.2l4.7-11.8" {...lineProps} />
+        <Path d="M17.9 20.2c-2.9 0-4.8-.9-5.6-2.3" {...lineProps} />
+        <SvgCircle cx="20" cy="18.4" r="1" fill={color} />
+      </Svg>
+    );
+  }
+
+  if (name === 'padel') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <SvgCircle cx="7.5" cy="5" r="1.8" fill="none" stroke={color} strokeWidth={strokeWidth} />
         <Path d="M8 7l2.6 4.2" {...lineProps} />
-        <Path d="M10.6 11.2l3.4 2" {...lineProps} />
-        <Path d="M10 11.5l-2.6 3.8" {...lineProps} />
-        <Path d="M13.8 13.2l4.1-6.6" {...lineProps} />
-        <Line x1="17.9" y1="6.6" x2="20.5" y2="8.2" {...lineProps} />
-        <SvgCircle cx="20" cy="19" r="1" fill={color} />
-        <Path d="M3.5 20h9.5" {...lineProps} />
+        <Path d="M10.6 11.2l-3.4 3.2" {...lineProps} />
+        <Path d="M10.6 11.2l3.7 4.1" {...lineProps} />
+        <Path d="M10 9.1l4.3-2.4" {...lineProps} />
+        <Rect x="14" y="4" width="5.4" height="7.8" rx="2.4" transform="rotate(-24 16.7 7.9)" {...lineProps} />
+        <Line x1="16.7" y1="11.2" x2="18.3" y2="15.1" {...lineProps} />
+        <SvgCircle cx="20" cy="18" r="1.5" fill="none" stroke={color} strokeWidth={strokeWidth} />
+        <SvgCircle cx="16" cy="6.8" r="0.45" fill={color} />
+        <SvgCircle cx="17.2" cy="8.7" r="0.45" fill={color} />
       </Svg>
     );
   }
 
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
-      <Rect x="7" y="3" width="8.5" height="13" rx="3.8" transform="rotate(-21 11.25 9.5)" {...lineProps} />
-      <Line x1="13.5" y1="15" x2="16.5" y2="21" {...lineProps} />
-      <Line x1="15" y1="20" x2="19" y2="18" {...lineProps} />
-      <SvgCircle cx="10" cy="7.2" r="0.6" fill={color} />
-      <SvgCircle cx="11.8" cy="10" r="0.6" fill={color} />
-      <SvgCircle cx="13" cy="12.8" r="0.6" fill={color} />
+      <SvgCircle cx="8.5" cy="5" r="1.8" fill="none" stroke={color} strokeWidth={strokeWidth} />
+      <Path d="M8.5 7l2.2 5" {...lineProps} />
+      <Path d="M10.7 12l-3 3.5" {...lineProps} />
+      <Path d="M10.7 12l4.2 3.4" {...lineProps} />
+      <Path d="M10 9.5l4-2.3" {...lineProps} />
+      <SvgCircle cx="17.8" cy="6.8" r="2.1" fill="none" stroke={color} strokeWidth={strokeWidth} />
+      <Path d="M4 20h16" {...lineProps} />
     </Svg>
   );
 }
@@ -453,8 +545,6 @@ function ActivityModal({
   const [distance, setDistance] = useState('');
   const [holes, setHoles] = useState('');
   const [walkedGolf, setWalkedGolf] = useState(true);
-  const setOptions = type === 'leg-day' ? [8, 10, 12, 15, 18, 20, 24] : [9, 10, 12, 15, 18, 20, 24];
-
   useEffect(() => {
     if (visible) {
       setDate(todayWithinChallenge());
@@ -534,15 +624,13 @@ function ActivityModal({
             />
           )}
           {(type === 'gym' || type === 'leg-day') && (
-            <MetricPickerField
+            <SetWheelField
               icon={type === 'leg-day' ? 'legDay' : 'sets'}
               label={type === 'leg-day' ? 'LEG WORKING SETS' : 'TOTAL WORKING SETS'}
               value={sets}
               onChange={setSets}
-              options={setOptions}
               placeholder={type === 'leg-day' ? 'Pick 8+ sets' : 'Pick 9+ sets'}
-              suffix="sets"
-              step={1}
+              minimumSets={type === 'leg-day' ? 8 : 9}
             />
           )}
           {type === 'running' && (
@@ -678,6 +766,51 @@ function MetricPickerField({
   );
 }
 
+function SetWheelField({
+  icon,
+  label,
+  value,
+  onChange,
+  placeholder,
+  minimumSets,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  minimumSets: number;
+}) {
+  const numericValue = Number(value);
+  const hasValue = value.trim().length > 0 && Number.isFinite(numericValue);
+  const selectedSets = hasValue ? Math.min(100, Math.max(1, Math.round(numericValue))) : minimumSets;
+  const setOptions = useMemo(() => Array.from({ length: 100 }, (_, index) => index + 1), []);
+
+  return (
+    <>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={styles.metricPicker}>
+        <View style={styles.metricTopRow}>
+          <View style={styles.metricIcon}>
+            <AppIcon name={icon} size={18} color={C.ink} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.metricMeta}>{hasValue ? 'Selected' : 'Scroll to choose'}</Text>
+            <Text style={[styles.metricValue, !hasValue && styles.metricPlaceholder]}>
+              {hasValue ? `${selectedSets} sets` : placeholder}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.durationWheelCard}>
+          <View style={styles.durationSelectionBand} pointerEvents="none" />
+          <WheelColumn label="sets" options={setOptions} selectedValue={selectedSets} onSelect={(nextSets) => onChange(String(nextSets))} />
+        </View>
+      </View>
+    </>
+  );
+}
+
 function DurationWheelField({
   icon,
   label,
@@ -753,12 +886,31 @@ function WheelColumn({
   selectedValue: number;
   onSelect: (value: number) => void;
 }) {
+  const scrollRef = useRef<ScrollView>(null);
+  const selectNearestItem = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const selectedIndex = Math.round(event.nativeEvent.contentOffset.y / 38);
+    const selectedOption = options[Math.max(0, Math.min(options.length - 1, selectedIndex))];
+    if (selectedOption !== undefined && selectedOption !== selectedValue) onSelect(selectedOption);
+  };
+
+  useEffect(() => {
+    const selectedIndex = options.findIndex((option) => option === selectedValue);
+    if (selectedIndex >= 0) {
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({ y: selectedIndex * 38, animated: false });
+      });
+    }
+  }, [options, selectedValue]);
+
   return (
     <View style={styles.wheelColumn}>
       <ScrollView
+        ref={scrollRef}
         showsVerticalScrollIndicator={false}
         snapToInterval={38}
         decelerationRate="fast"
+        onMomentumScrollEnd={selectNearestItem}
+        onScrollEndDrag={selectNearestItem}
         contentContainerStyle={styles.wheelContent}
       >
         {options.map((option) => {
@@ -1077,11 +1229,19 @@ function RulesScreen() {
   );
 }
 
-function SettingsScreen({ state, setState }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>> }) {
+function SettingsScreen({
+  state,
+  setState,
+  syncStatus,
+}: {
+  state: AppState;
+  setState: React.Dispatch<React.SetStateAction<AppState>>;
+  syncStatus: SyncStatus;
+}) {
   return (
     <ScrollView contentContainerStyle={styles.screenContent} showsVerticalScrollIndicator={false}>
       <Header eyebrow="PEAK 25" title="Your profile" />
-      <Text style={styles.leadCopy}>Choose who is using this phone. Shared accounts and automatic syncing will replace this switch in the next version.</Text>
+      <Text style={styles.leadCopy}>Choose who is using this phone. Activity and exclusion records sync across devices when the shared server is running.</Text>
       <Text style={styles.settingsLabel}>CHECKING IN AS</Text>
       <View style={styles.settingsCard}>
         {state.players.map((player, index) => (
@@ -1106,8 +1266,12 @@ function SettingsScreen({ state, setState }: { state: AppState; setState: React.
         </View>
         <View style={[styles.settingsRow, styles.settingsBorder]}>
           <View style={styles.dataIcon}><AppIcon name="cloud" size={20} color={C.ink} /></View>
-          <View style={{ flex: 1 }}><Text style={styles.settingsName}>Shared group sync</Text><Text style={styles.settingsSub}>Accounts + live updates</Text></View>
-          <View style={styles.soonPill}><Text style={styles.soonText}>NEXT</Text></View>
+          <View style={{ flex: 1 }}><Text style={styles.settingsName}>Shared group sync</Text><Text style={styles.settingsSub}>{syncStatus.message}</Text></View>
+          <View style={syncStatus.state === 'synced' ? styles.localPill : syncStatus.state === 'saving' || syncStatus.state === 'connecting' ? styles.syncingPill : styles.soonPill}>
+            <Text style={syncStatus.state === 'synced' ? styles.localPillText : syncStatus.state === 'saving' || syncStatus.state === 'connecting' ? styles.syncingText : styles.soonText}>
+              {syncStatus.state === 'synced' ? 'LIVE' : syncStatus.state === 'saving' ? 'SYNC' : syncStatus.state === 'connecting' ? 'WAIT' : 'OFF'}
+            </Text>
+          </View>
         </View>
         <View style={[styles.settingsRow, styles.settingsBorder]}>
           <View style={styles.dataIcon}><AppIcon name="cloudDownload" size={20} color={C.ink} /></View>
@@ -1150,10 +1314,59 @@ function AppContent() {
   const [state, setState] = useState<AppState>(initialState);
   const [tab, setTab] = useState<Tab>('today');
   const [ready, setReady] = useState(false);
+  const [remoteReady, setRemoteReady] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>({
+    state: syncUrl ? 'connecting' : 'offline',
+    message: syncUrl ? 'Connecting to shared sync server' : 'No shared sync server configured',
+  });
+  const clientIdRef = useRef<string>('');
+  const revisionRef = useRef(0);
+  const lastSyncedSnapshotRef = useRef('');
+  const pushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const applyRemoteState = (remote: { activities: Activity[]; exclusions: AppState['exclusions']; revision: number; updatedAt: string }) => {
+    const nextSnapshot = sharedSnapshot(remote);
+    revisionRef.current = remote.revision;
+    lastSyncedSnapshotRef.current = nextSnapshot;
+    setState((current) => withSeedActivities({
+      ...current,
+      activities: remote.activities,
+      exclusions: remote.exclusions,
+    }));
+    setSyncStatus({
+      state: 'synced',
+      message: `Live at ${new Date(remote.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+    });
+  };
+
+  const pullRemoteState = async () => {
+    if (!syncUrl) return;
+    try {
+      const remote = await fetchRemoteState();
+      if (sharedSnapshot(remote) !== lastSyncedSnapshotRef.current) applyRemoteState(remote);
+      else {
+        revisionRef.current = remote.revision;
+        setSyncStatus({
+          state: 'synced',
+          message: `Live at ${new Date(remote.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+        });
+      }
+    } catch {
+      setSyncStatus({ state: 'offline', message: 'Shared sync server is offline' });
+    } finally {
+      setRemoteReady(true);
+    }
+  };
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((stored) => {
+    Promise.all([
+      AsyncStorage.getItem(STORAGE_KEY),
+      AsyncStorage.getItem(`${STORAGE_KEY}-client-id`),
+    ])
+      .then(([stored, clientId]) => {
+        const nextClientId = clientId || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        clientIdRef.current = nextClientId;
+        if (!clientId) AsyncStorage.setItem(`${STORAGE_KEY}-client-id`, nextClientId).catch(() => undefined);
         if (stored) setState(withSeedActivities(JSON.parse(stored)));
       })
       .catch(() => undefined)
@@ -1164,12 +1377,45 @@ function AppContent() {
     if (ready) AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => undefined);
   }, [state, ready]);
 
+  useEffect(() => {
+    if (!ready || !syncUrl) {
+      if (ready) setRemoteReady(true);
+      return undefined;
+    }
+
+    pullRemoteState();
+    const interval = setInterval(pullRemoteState, 5000);
+    return () => clearInterval(interval);
+  }, [ready]);
+
+  useEffect(() => {
+    if (!ready || !remoteReady || !syncUrl || !clientIdRef.current) return undefined;
+    const snapshot = sharedSnapshot(state);
+    if (snapshot === lastSyncedSnapshotRef.current) return undefined;
+
+    setSyncStatus({ state: 'saving', message: 'Saving group changes' });
+    if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
+    pushTimerRef.current = setTimeout(() => {
+      pushRemoteState(
+        { activities: state.activities, exclusions: state.exclusions },
+        revisionRef.current,
+        clientIdRef.current,
+      )
+        .then(applyRemoteState)
+        .catch(() => setSyncStatus({ state: 'offline', message: 'Saved locally, sync server offline' }));
+    }, 700);
+
+    return () => {
+      if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
+    };
+  }, [state.activities, state.exclusions, ready, remoteReady]);
+
   const screen = useMemo(() => {
     if (tab === 'group') return <GroupScreen state={state} />;
     if (tab === 'rules') return <RulesScreen />;
-    if (tab === 'settings') return <SettingsScreen state={state} setState={setState} />;
+    if (tab === 'settings') return <SettingsScreen state={state} setState={setState} syncStatus={syncStatus} />;
     return <TodayScreen state={state} setState={setState} />;
-  }, [state, tab]);
+  }, [state, syncStatus, tab]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -1286,6 +1532,8 @@ const styles = StyleSheet.create({
   localPillText: { color: '#47612D', fontSize: 8, fontWeight: '900', letterSpacing: 0.5 },
   soonPill: { backgroundColor: '#EEEAE4', borderRadius: 10, paddingHorizontal: 9, paddingVertical: 5 },
   soonText: { color: C.muted, fontSize: 8, fontWeight: '900', letterSpacing: 0.5 },
+  syncingPill: { backgroundColor: '#E3EEF9', borderRadius: 10, paddingHorizontal: 9, paddingVertical: 5 },
+  syncingText: { color: '#3B5B77', fontSize: 8, fontWeight: '900', letterSpacing: 0.5 },
   resetButton: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 27, padding: 15 },
   resetText: { color: C.danger, fontSize: 12, fontWeight: '800' },
   bottomNav: { position: 'absolute', left: 13, right: 13, bottom: 11, height: 76, borderRadius: 25, backgroundColor: C.card, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 6, shadowColor: '#22302B', shadowOpacity: 0.13, shadowRadius: 22, shadowOffset: { width: 0, height: 8 }, elevation: 12 },

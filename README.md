@@ -38,6 +38,26 @@ If tunnel mode fails with `Cannot read properties of undefined (reading 'body')`
 
 For a browser preview, run `npm run web`.
 
+## Run with shared device sync
+
+Open two terminals on the development computer:
+
+```powershell
+npm.cmd run sync
+npm.cmd run web
+```
+
+The website runs on `http://localhost:8081` and the sync API runs on `http://localhost:8787`.
+Devices on the same Wi-Fi should open the computer's LAN address instead, for example `http://192.168.1.98:8081`.
+The app automatically talks to the same host on port `8787`, so activity and exclusion records are stored in `data/shared-sync-state.json` and shared across devices while the sync server is running.
+
+For Expo Go/native testing, set `EXPO_PUBLIC_SYNC_URL` to the computer's LAN sync URL before starting Expo:
+
+```powershell
+$env:EXPO_PUBLIC_SYNC_URL="http://192.168.1.98:8787"
+npm.cmd run web
+```
+
 ## Check the app
 
 ```bash

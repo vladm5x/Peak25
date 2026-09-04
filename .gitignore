@@ -5,6 +5,7 @@ dist-ios/
 dist-web/
 web-build/
 .vercel/
+data/shared-sync-state.json
 expo-start*.log
 npm-debug.log*
 .DS_Store
