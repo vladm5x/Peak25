@@ -235,11 +235,10 @@ function CustomActivityIcon({
   if (name === 'stairmaster') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24">
-        <Path d="M4 18.5h4.2v-3.4h4.2v-3.4h4.2V8.3H20" {...lineProps} />
-        <Path d="M18.7 5.5v13" {...lineProps} />
-        <Path d="M5.7 18.5L8.2 7.2h10.5" {...lineProps} />
-        <Path d="M9.1 7.2l1.9 3.2" {...detailProps} />
-        <Path d="M3.5 21h17" {...lineProps} />
+        <Path d="M3.5 19.5h5v-4h5v-4h5V7.5h2" {...lineProps} />
+        <Path d="M3.5 21h18" {...detailProps} />
+        <SvgCircle cx="10.1" cy="4.8" r="1.7" {...shapeProps} />
+        <Path d="M10.1 6.7l-1 4.2 3.1 1.8 2.8 3.5M9.2 10.9l-2.8 1.8M12.2 12.7l-1 5.3M12.2 12.7l3.7-1.8" {...lineProps} />
       </Svg>
     );
   }
