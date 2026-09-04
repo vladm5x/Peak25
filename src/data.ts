@@ -30,6 +30,7 @@ export const initialState: AppState = {
   activities: seedActivities,
   exclusions: [],
   sportResults: [],
+  theme: { accentColor: '#C9F66F' },
 };
 
 export const sportResultDefinitions = activityDefinitions.filter((item) =>
@@ -237,5 +238,6 @@ export function withSeedActivities(state: AppState) {
       ...state.activities,
     ],
     sportResults: state.sportResults ?? [],
+    theme: state.theme ?? initialState.theme,
   };
 }

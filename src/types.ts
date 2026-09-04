@@ -5,6 +5,7 @@ export type Player = {
   name: string;
   initials: string;
   color: string;
+  photoUri?: string;
 };
 
 export type ActivityType =
@@ -61,6 +62,9 @@ export type AppState = {
   activities: Activity[];
   exclusions: Exclusion[];
   sportResults: SportResult[];
+  theme?: {
+    accentColor: string;
+  };
 };
 
 export type ActivityDefinition = {

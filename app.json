@@ -10,7 +10,10 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.vlad.peak25"
+      "bundleIdentifier": "com.vlad.peak25",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Peak 25 lets you choose a profile photo from your library."
+      }
     },
     "android": {
       "package": "com.vlad.peak25"

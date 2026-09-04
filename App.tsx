@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -46,6 +47,7 @@ import {
 import type { LucideIcon } from 'lucide-react-native';
 import {
   LayoutAnimation,
+  Image,
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -385,10 +387,18 @@ const activitySummary = (activity: Activity) => {
   return parts.length ? parts.join(' · ') : 'Saved for this date';
 };
 
+const themeColor = (state: AppState) => state.theme?.accentColor ?? C.lime;
+
+const themeChoices = ['#C9F66F', '#A8C7FA', '#FFD0A6', '#D9C6F5', '#F4E77D', '#BFEBD5', '#F5C6C6', '#BEEAEC'];
+
 function Avatar({ player, size = 42 }: { player: Player; size?: number }) {
   return (
-    <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2, backgroundColor: player.color }]}> 
-      <Text style={[styles.avatarText, { fontSize: size * 0.3 }]}>{player.initials}</Text>
+    <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2, backgroundColor: player.color }]}>
+      {player.photoUri ? (
+        <Image source={{ uri: player.photoUri }} style={{ width: size, height: size, borderRadius: size / 2 }} />
+      ) : (
+        <Text style={[styles.avatarText, { fontSize: size * 0.3 }]}>{player.initials}</Text>
+      )}
     </View>
   );
 }
@@ -401,9 +411,9 @@ function ProgressBar({ value, color = C.lime, track = '#354640' }: { value: numb
   );
 }
 
-function StatusPill({ status }: { status: 'complete' | 'excluded' | 'open' }) {
+function StatusPill({ status, accentColor = C.lime }: { status: 'complete' | 'excluded' | 'open'; accentColor?: string }) {
   const config = {
-    complete: { label: 'DONE', icon: 'check', bg: C.lime, fg: C.ink },
+    complete: { label: 'DONE', icon: 'check', bg: accentColor, fg: C.ink },
     excluded: { label: 'EXCLUDED', icon: 'medical', bg: '#FFE0B8', fg: '#70451D' },
     open: { label: 'OPEN', icon: 'duration', bg: '#ECEAE4', fg: C.muted },
   }[status];
@@ -1360,7 +1370,7 @@ function ResultModal({
   );
 }
 
-function TodayScreen({ state, setState }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>> }) {
+function TodayScreen({ state, setState, accentColor }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; accentColor: string }) {
   const [logMode, setLogMode] = useState<LogMode>(null);
   const player = state.players.find((item) => item.id === state.selectedPlayerId) ?? state.players[0]!;
   const today = todayWithinChallenge();
@@ -1401,11 +1411,11 @@ function TodayScreen({ state, setState }: { state: AppState; setState: React.Dis
               <Text style={styles.heroLabel}>ACTIVITY TARGET</Text>
               <Text style={styles.heroNumber}>{progress.activityDays}<Text style={styles.heroMax}> / {progress.requiredDays}</Text></Text>
             </View>
-            <View style={styles.percentCircle}>
+            <View style={[styles.percentCircle, { borderColor: accentColor }]}>
               <Text style={styles.percentValue}>{Math.round(progress.activityPercent * 100)}%</Text>
             </View>
           </View>
-          <ProgressBar value={progress.activityPercent} />
+          <ProgressBar value={progress.activityPercent} color={accentColor} />
           <View style={styles.heroFooter}>
             <Text style={styles.heroFooterText}>{progress.eligibleDays} eligible days</Text>
             <Text style={styles.heroFooterText}>6/7 required overall</Text>
@@ -1425,12 +1435,12 @@ function TodayScreen({ state, setState }: { state: AppState; setState: React.Dis
                 <Text style={styles.todayTitle}>{status === 'complete' && todayActivity ? activityLabel(todayActivity.type) : status === 'excluded' ? 'Sickness / injury' : 'No activity yet'}</Text>
               </View>
             </View>
-            <StatusPill status={status} />
+            <StatusPill status={status} accentColor={accentColor} />
           </View>
           {status === 'open' ? (
             <>
               <Text style={styles.todayCopy}>Log one qualifying activity. Only one can count today.</Text>
-              <Pressable style={styles.primaryAction} onPress={() => setLogMode('activity')}>
+              <Pressable style={[styles.primaryAction, { backgroundColor: accentColor }]} onPress={() => setLogMode('activity')}>
                 <AppIcon name="add" size={20} color={C.ink} />
                 <Text style={styles.primaryActionText}>Log today’s activity</Text>
               </Pressable>
@@ -1451,7 +1461,7 @@ function TodayScreen({ state, setState }: { state: AppState; setState: React.Dis
         </View>
 
         <View style={styles.weekCard}>
-          <View style={[styles.weekIcon, { backgroundColor: legThisWeek ? C.lime : '#FFE0B8' }]}>
+          <View style={[styles.weekIcon, { backgroundColor: legThisWeek ? accentColor : '#FFE0B8' }]}>
             <AppIcon name={legThisWeek ? 'check' : 'legDay'} size={21} color={C.ink} />
           </View>
           <View style={{ flex: 1 }}>
@@ -1568,7 +1578,7 @@ function GroupScreen({ state }: { state: AppState }) {
   );
 }
 
-function StatisticsScreen({ state }: { state: AppState }) {
+function StatisticsScreen({ state, accentColor }: { state: AppState; accentColor: string }) {
   const stats = sportResultStats(state);
   const leader = stats.standings[0];
   const leaderPlayer = leader ? state.players.find((player) => player.id === leader.playerId) : undefined;
@@ -1585,7 +1595,7 @@ function StatisticsScreen({ state }: { state: AppState }) {
             <Text style={styles.statsHeroName}>{leaderPlayer ? leaderPlayer.name : 'No games yet'}</Text>
             <Text style={styles.statsHeroMeta}>{leader ? `${leader.wins} wins from ${leader.played} games` : 'Log the first result to start the table'}</Text>
           </View>
-          <View style={styles.statsHeroIcon}><AppIcon name="trophy" size={34} color={C.ink} /></View>
+          <View style={[styles.statsHeroIcon, { backgroundColor: accentColor }]}><AppIcon name="trophy" size={34} color={C.ink} /></View>
         </View>
 
         <View style={styles.sectionHeading}>
@@ -1715,11 +1725,36 @@ function SettingsScreen({
   state,
   setState,
   syncStatus,
+  accentColor,
 }: {
   state: AppState;
   setState: React.Dispatch<React.SetStateAction<AppState>>;
   syncStatus: SyncStatus;
+  accentColor: string;
 }) {
+  const pickProfilePhoto = async (playerId: PlayerId) => {
+    if (Platform.OS !== 'web') {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.65,
+      base64: true,
+    });
+
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    const uri = asset.base64 ? `data:${asset.mimeType ?? 'image/jpeg'};base64,${asset.base64}` : asset.uri;
+    setState((current) => ({
+      ...current,
+      players: current.players.map((player) => player.id === playerId ? { ...player, photoUri: uri } : player),
+    }));
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.screenContent} showsVerticalScrollIndicator={false}>
       <Header eyebrow="PEAK 25" title="Your profile" />
@@ -1737,6 +1772,41 @@ function SettingsScreen({
             <AppIcon name={state.selectedPlayerId === player.id ? 'selected' : 'unselected'} size={23} color={state.selectedPlayerId === player.id ? C.ink : '#A6ADA9'} />
           </Pressable>
         ))}
+      </View>
+
+      <Text style={styles.settingsLabel}>PROFILE PHOTOS</Text>
+      <View style={styles.settingsCard}>
+        {state.players.map((player, index) => (
+          <View key={player.id} style={[styles.settingsRow, index > 0 && styles.settingsBorder]}>
+            <Avatar player={player} size={44} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.settingsName}>{player.name}</Text>
+              <Text style={styles.settingsSub}>{player.photoUri ? 'Photo selected' : 'Use a photo from your library'}</Text>
+            </View>
+            <Pressable onPress={() => pickProfilePhoto(player.id)} style={[styles.smallActionButton, { backgroundColor: accentColor }]}>
+              <AppIcon name="edit" size={15} color={C.ink} />
+            </Pressable>
+          </View>
+        ))}
+      </View>
+
+      <Text style={styles.settingsLabel}>APP COLOR</Text>
+      <View style={styles.colorCard}>
+        {themeChoices.map((color) => {
+          const active = color.toLowerCase() === accentColor.toLowerCase();
+          return (
+            <Pressable
+              key={color}
+              accessibilityRole="button"
+              accessibilityLabel={`Use color ${color}`}
+              onPress={() => setState((current) => ({ ...current, theme: { accentColor: color } }))}
+              style={[styles.colorSwatchButton, active && styles.colorSwatchButtonActive]}
+            >
+              <View style={[styles.colorSwatch, { backgroundColor: color }]} />
+              {active && <AppIcon name="check" size={17} color={C.ink} />}
+            </Pressable>
+          );
+        })}
       </View>
 
       <Text style={styles.settingsLabel}>DATA & SYNC</Text>
@@ -1770,7 +1840,7 @@ function SettingsScreen({
   );
 }
 
-function BottomNav({ tab, setTab }: { tab: Tab; setTab: (tab: Tab) => void }) {
+function BottomNav({ tab, setTab, accentColor }: { tab: Tab; setTab: (tab: Tab) => void; accentColor: string }) {
   const items: { id: Tab; label: string; icon: string }[] = [
     { id: 'today', label: 'Today', icon: 'checkCircle' },
     { id: 'group', label: 'Group', icon: 'group' },
@@ -1784,7 +1854,7 @@ function BottomNav({ tab, setTab }: { tab: Tab; setTab: (tab: Tab) => void }) {
         const active = item.id === tab;
         return (
           <Pressable key={item.id} onPress={() => setTab(item.id)} style={styles.navItem}>
-            <View style={[styles.navIconWrap, active && styles.navIconActive]}><AppIcon name={item.icon} size={21} color={active ? C.ink : '#7D8581'} /></View>
+            <View style={[styles.navIconWrap, active && styles.navIconActive, active && { backgroundColor: accentColor }]}><AppIcon name={item.icon} size={21} color={active ? C.ink : '#7D8581'} /></View>
             <Text style={[styles.navLabel, active && styles.navLabelActive]}>{item.label}</Text>
           </Pressable>
         );
@@ -1806,6 +1876,7 @@ function AppContent() {
   const revisionRef = useRef(0);
   const lastSyncedSnapshotRef = useRef('');
   const pushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const accentColor = themeColor(state);
 
   const applyRemoteState = (remote: { activities: Activity[]; exclusions: AppState['exclusions']; sportResults?: SportResult[]; revision: number; updatedAt: string }) => {
     const nextSnapshot = sharedSnapshot({ ...remote, sportResults: remote.sportResults ?? [] });
@@ -1896,18 +1967,18 @@ function AppContent() {
 
   const screen = useMemo(() => {
     if (tab === 'group') return <GroupScreen state={state} />;
-    if (tab === 'statistics') return <StatisticsScreen state={state} />;
+    if (tab === 'statistics') return <StatisticsScreen state={state} accentColor={accentColor} />;
     if (tab === 'rules') return <RulesScreen />;
-    if (tab === 'settings') return <SettingsScreen state={state} setState={setState} syncStatus={syncStatus} />;
-    return <TodayScreen state={state} setState={setState} />;
-  }, [state, syncStatus, tab]);
+    if (tab === 'settings') return <SettingsScreen state={state} setState={setState} syncStatus={syncStatus} accentColor={accentColor} />;
+    return <TodayScreen state={state} setState={setState} accentColor={accentColor} />;
+  }, [accentColor, state, syncStatus, tab]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar style="dark" />
       <View style={styles.appShell}>
         {screen}
-        <BottomNav tab={tab} setTab={setTab} />
+        <BottomNav tab={tab} setTab={setTab} accentColor={accentColor} />
       </View>
     </SafeAreaView>
   );
@@ -2022,6 +2093,11 @@ const styles = StyleSheet.create({
   settingsBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.line },
   settingsName: { color: C.ink, fontSize: 14, fontWeight: '800', flex: 1 },
   settingsSub: { color: C.muted, fontSize: 10, marginTop: 2 },
+  smallActionButton: { width: 38, height: 38, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  colorCard: { backgroundColor: C.card, borderRadius: 21, padding: 13, flexDirection: 'row', flexWrap: 'wrap', gap: 9 },
+  colorSwatchButton: { width: 46, height: 46, borderRadius: 16, borderWidth: 1.5, borderColor: C.line, alignItems: 'center', justifyContent: 'center' },
+  colorSwatchButtonActive: { borderColor: C.ink, backgroundColor: '#F6F5F0' },
+  colorSwatch: { position: 'absolute', width: 28, height: 28, borderRadius: 10 },
   dataIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#EEEEE8', alignItems: 'center', justifyContent: 'center' },
   localPill: { backgroundColor: '#E7F7C9', borderRadius: 10, paddingHorizontal: 9, paddingVertical: 5 },
   localPillText: { color: '#47612D', fontSize: 8, fontWeight: '900', letterSpacing: 0.5 },
