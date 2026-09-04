@@ -6,6 +6,14 @@ export const CHALLENGE_END = '2026-12-20';
 export const BET_SEK = 1000;
 export const STORAGE_KEY = 'peak-25-state-v2';
 
+const defaultTheme: NonNullable<AppState['theme']> = {
+  accentColor: '#C9F66F',
+  mode: 'light',
+  cardStyle: 'soft',
+  showPhotos: true,
+  celebrations: true,
+};
+
 export const activityDefinitions: ActivityDefinition[] = [
   { id: 'gym', label: 'Gym', shortRule: '>30 min and >8 working sets', icon: 'gym', color: '#DDF7B2' },
   { id: 'leg-day', label: 'Leg day', shortRule: '>30 min and 8+ leg sets', icon: 'legDay', color: '#C9F66F' },
@@ -30,7 +38,7 @@ export const initialState: AppState = {
   activities: seedActivities,
   exclusions: [],
   sportResults: [],
-  theme: { accentColor: '#C9F66F' },
+  theme: defaultTheme,
 };
 
 export const sportResultDefinitions = activityDefinitions.filter((item) =>
@@ -275,6 +283,6 @@ export function withSeedActivities(state: AppState) {
       ...state.activities,
     ],
     sportResults: state.sportResults ?? [],
-    theme: state.theme ?? initialState.theme,
+    theme: { ...defaultTheme, ...state.theme },
   };
 }

@@ -391,10 +391,33 @@ const themeColor = (state: AppState) => state.theme?.accentColor ?? C.lime;
 
 const themeChoices = ['#C9F66F', '#A8C7FA', '#FFD0A6', '#D9C6F5', '#F4E77D', '#BFEBD5', '#F5C6C6', '#BEEAEC'];
 
-function Avatar({ player, size = 42 }: { player: Player; size?: number }) {
+const themeMode = (state: AppState) => state.theme?.mode ?? 'light';
+
+const isCompactTheme = (state: AppState) => state.theme?.cardStyle === 'compact';
+
+const showProfilePhotos = (state: AppState) => state.theme?.showPhotos !== false;
+
+const activitySortValue = (activity: Activity) => `${activity.date}-${activity.id}`;
+
+const findResultForActivity = (results: SportResult[], activity: Activity) =>
+  results.find((result) => result.activityId === activity.id) ??
+  results.find((result) => result.date === activity.date && result.sport === activity.type && result.participantIds.includes(activity.playerId));
+
+const scoreRoundsFromResult = (sport: ActivityType, result?: SportResult): ScoreRoundDraft[] => {
+  if (!result?.rounds?.length) return initialScoreRounds(sport);
+  return result.rounds.map((round, index) => ({
+    id: round.id || `${Date.now()}-${index + 1}`,
+    label: round.label || `${scoreRoundLabel(sport)} ${index + 1}`,
+    scores: Object.fromEntries(
+      Object.entries(round.scores).map(([playerId, score]) => [playerId, typeof score === 'number' ? String(score) : '']),
+    ) as Partial<Record<PlayerId, string>>,
+  }));
+};
+
+function Avatar({ player, size = 42, showPhoto = true }: { player: Player; size?: number; showPhoto?: boolean }) {
   return (
     <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2, backgroundColor: player.color }]}>
-      {player.photoUri ? (
+      {showPhoto && player.photoUri ? (
         <Image source={{ uri: player.photoUri }} style={{ width: size, height: size, borderRadius: size / 2 }} />
       ) : (
         <Text style={[styles.avatarText, { fontSize: size * 0.3 }]}>{player.initials}</Text>
@@ -425,14 +448,14 @@ function StatusPill({ status, accentColor = C.lime }: { status: 'complete' | 'ex
   );
 }
 
-function Header({ player, eyebrow, title }: { player?: Player; eyebrow: string; title: string }) {
+function Header({ player, eyebrow, title, showPhoto = true }: { player?: Player; eyebrow: string; title: string; showPhoto?: boolean }) {
   return (
     <View style={styles.headerRow}>
       <View style={{ flex: 1 }}>
         <Text style={styles.eyebrow}>{eyebrow}</Text>
         <Text style={styles.pageTitle}>{title}</Text>
       </View>
-      {player && <Avatar player={player} size={46} />}
+      {player && <Avatar player={player} size={46} showPhoto={showPhoto} />}
     </View>
   );
 }
@@ -731,14 +754,22 @@ function ActivityModal({
   visible,
   playerId,
   players,
+  activityToEdit,
+  resultToEdit,
+  celebrations = true,
   onClose,
   onSave,
+  onDelete,
 }: {
   visible: boolean;
   playerId: PlayerId;
   players: Player[];
+  activityToEdit?: Activity;
+  resultToEdit?: SportResult;
+  celebrations?: boolean;
   onClose: () => void;
   onSave: (activity: Activity, result?: SportResult) => void;
+  onDelete?: (activity: Activity) => void;
 }) {
   const [type, setType] = useState<ActivityType>('gym');
   const [date, setDate] = useState(todayWithinChallenge());
@@ -753,13 +784,20 @@ function ActivityModal({
   const [scoreRounds, setScoreRounds] = useState<ScoreRoundDraft[]>(() => initialScoreRounds('padel'));
   useEffect(() => {
     if (visible) {
-      setDate(todayWithinChallenge());
-      setRecordScore(false);
-      setParticipantIds([playerId]);
-      setWinnerId(playerId);
-      setScoreRounds(initialScoreRounds(type));
+      const nextType = activityToEdit?.type ?? 'gym';
+      setType(nextType);
+      setDate(activityToEdit?.date ?? todayWithinChallenge());
+      setDuration(activityToEdit?.durationMinutes ? String(activityToEdit.durationMinutes) : '');
+      setSets(activityToEdit?.workingSets ? String(activityToEdit.workingSets) : '');
+      setDistance(activityToEdit?.distanceKm ? String(activityToEdit.distanceKm) : '');
+      setHoles(activityToEdit?.golfHoles ? String(activityToEdit.golfHoles) : '');
+      setWalkedGolf(activityToEdit?.walkedGolf ?? true);
+      setRecordScore(Boolean(resultToEdit));
+      setParticipantIds(resultToEdit?.participantIds ?? [playerId]);
+      setWinnerId(resultToEdit?.winnerId ?? playerId);
+      setScoreRounds(scoreRoundsFromResult(nextType, resultToEdit));
     }
-  }, [playerId, type, visible]);
+  }, [activityToEdit?.id, playerId, resultToEdit?.id, visible]);
 
   const candidate = {
     date,
@@ -800,7 +838,8 @@ function ActivityModal({
   const save = () => {
     if (!canSave) return;
     const result = recordScore && canRecordScore ? {
-      id: createSportResultId(type, date),
+      id: resultToEdit?.id ?? createSportResultId(type, date),
+      activityId: activityToEdit?.id ?? createActivityId(playerId, date),
       date,
       sport: type,
       winnerId,
@@ -817,8 +856,9 @@ function ActivityModal({
       })),
       note: `${selectedDefinition.label} score logged with activity`,
     } satisfies SportResult : undefined;
-    onSave({ ...candidate, id: createActivityId(playerId, date), playerId }, result);
-    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    const activityId = activityToEdit?.id ?? result?.activityId ?? createActivityId(playerId, date);
+    onSave({ ...candidate, id: activityId, playerId }, result ? { ...result, activityId } : undefined);
+    if (celebrations && Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     onClose();
   };
 
@@ -827,7 +867,7 @@ function ActivityModal({
       <SafeAreaView style={styles.modalPage} edges={['top', 'bottom']}>
         <View style={styles.modalHeader}>
           <Pressable onPress={onClose} style={styles.closeButton}><AppIcon name="close" size={22} color={C.ink} /></Pressable>
-          <Text style={styles.modalHeading}>Log activity</Text>
+          <Text style={styles.modalHeading}>{activityToEdit ? 'Edit activity' : 'Log activity'}</Text>
           <View style={{ width: 40 }} />
         </View>
         <ScrollView contentContainerStyle={styles.modalContent} showsVerticalScrollIndicator={false}>
@@ -928,8 +968,20 @@ function ActivityModal({
 
           <Pressable onPress={save} disabled={!canSave} style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}>
             <AppIcon name="checkCircle" size={19} color="#FFFFFF" />
-            <Text style={styles.saveButtonText}>Save activity</Text>
+            <Text style={styles.saveButtonText}>{activityToEdit ? 'Save changes' : 'Save activity'}</Text>
           </Pressable>
+          {activityToEdit && onDelete && (
+            <Pressable
+              onPress={() => {
+                onDelete(activityToEdit);
+                onClose();
+              }}
+              style={styles.deleteButton}
+            >
+              <AppIcon name="reset" size={17} color={C.danger} />
+              <Text style={styles.resetText}>Delete activity</Text>
+            </Pressable>
+          )}
         </ScrollView>
       </SafeAreaView>
     </Modal>
@@ -1386,8 +1438,19 @@ function ResultModal({
   );
 }
 
-function TodayScreen({ state, setState, accentColor }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; accentColor: string }) {
+function TodayScreen({
+  state,
+  setState,
+  accentColor,
+  compact,
+}: {
+  state: AppState;
+  setState: React.Dispatch<React.SetStateAction<AppState>>;
+  accentColor: string;
+  compact: boolean;
+}) {
   const [logMode, setLogMode] = useState<LogMode>(null);
+  const [editingActivity, setEditingActivity] = useState<Activity | undefined>(undefined);
   const player = state.players.find((item) => item.id === state.selectedPlayerId) ?? state.players[0]!;
   const today = todayWithinChallenge();
   const status = todaysStatus(state, player.id, today);
@@ -1398,6 +1461,11 @@ function TodayScreen({ state, setState, accentColor }: { state: AppState; setSta
   const todayActivity = todayActivities.find((item) => isActivityValid(item));
   const todayDefinition = todayActivity ? activityDefinitions.find((item) => item.id === todayActivity.type) : undefined;
   const recentDates = elapsedChallengeDates().slice(-7).reverse();
+  const recentActivities = state.activities
+    .filter((item) => item.playerId === player.id && item.date <= today)
+    .sort((a, b) => activitySortValue(b).localeCompare(activitySortValue(a)))
+    .slice(0, 18);
+  const editingResult = editingActivity ? findResultForActivity(state.sportResults ?? [], editingActivity) : undefined;
 
   const saveActivity = (activity: Activity, result?: SportResult) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -1405,8 +1473,32 @@ function TodayScreen({ state, setState, accentColor }: { state: AppState; setSta
       ...current,
       activities: upsertActivity(current.activities, activity),
       exclusions: current.exclusions.filter((item) => !(item.playerId === activity.playerId && item.date === activity.date)),
-      sportResults: result ? upsertSportResult(current.sportResults ?? [], result) : current.sportResults,
+      sportResults: result
+        ? upsertSportResult(current.sportResults ?? [], result)
+        : (current.sportResults ?? []).filter((item) => (
+          item.activityId !== activity.id &&
+          !(editingResult && item.id === editingResult.id)
+        )),
     }));
+    setEditingActivity(undefined);
+  };
+
+  const deleteActivity = (activity: Activity) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setState((current) => ({
+      ...current,
+      activities: current.activities.filter((item) => item.id !== activity.id),
+      sportResults: (current.sportResults ?? []).filter((item) => (
+        item.activityId !== activity.id &&
+        !(item.date === activity.date && item.sport === activity.type && item.participantIds.includes(activity.playerId))
+      )),
+    }));
+    setEditingActivity(undefined);
+  };
+
+  const editActivity = (activity: Activity) => {
+    setEditingActivity(activity);
+    setLogMode('activity');
   };
 
   const saveExclusion = (date: string, reason: string, excludesLegWeek: boolean) => {
@@ -1419,8 +1511,8 @@ function TodayScreen({ state, setState, accentColor }: { state: AppState; setSta
 
   return (
     <>
-      <ScrollView contentContainerStyle={styles.screenContent} showsVerticalScrollIndicator={false}>
-        <Header player={player} eyebrow={`PEAK 25 · DAY ${dayNumber} OF ${challengeDates.length}`} title={`Ready, ${player.name}?`} />
+      <ScrollView contentContainerStyle={[styles.screenContent, compact && styles.screenContentCompact]} showsVerticalScrollIndicator={false}>
+        <Header player={player} showPhoto={showProfilePhotos(state)} eyebrow={`PEAK 25 · DAY ${dayNumber} OF ${challengeDates.length}`} title={`Ready, ${player.name}?`} />
 
         <View style={styles.heroCard}>
           <View style={styles.heroTopRow}>
@@ -1457,7 +1549,7 @@ function TodayScreen({ state, setState, accentColor }: { state: AppState; setSta
           {status === 'open' ? (
             <>
               <Text style={styles.todayCopy}>Log one or more qualifying activities. The day counts once toward the challenge.</Text>
-              <Pressable style={[styles.primaryAction, { backgroundColor: accentColor }]} onPress={() => setLogMode('activity')}>
+              <Pressable style={[styles.primaryAction, { backgroundColor: accentColor }]} onPress={() => { setEditingActivity(undefined); setLogMode('activity'); }}>
                 <AppIcon name="add" size={20} color={C.ink} />
                 <Text style={styles.primaryActionText}>Log today’s activity</Text>
               </Pressable>
@@ -1469,9 +1561,28 @@ function TodayScreen({ state, setState, accentColor }: { state: AppState; setSta
           ) : (
             <>
               <Text style={styles.todayCopy}>{status === 'complete' && todayActivity ? `${todayActivities.length} activities logged today. ${activitySummary(todayActivity)}` : 'This day has been removed from the eligible-day denominator.'}</Text>
-              <Pressable style={styles.secondaryAction} onPress={() => setLogMode(status === 'complete' ? 'activity' : 'exclusion')}>
+              {todayActivities.length > 0 && (
+                <View style={styles.todayActivityList}>
+                  {todayActivities.map((activity) => {
+                    const definition = activityDefinitions.find((item) => item.id === activity.type);
+                    return (
+                      <Pressable key={activity.id} onPress={() => editActivity(activity)} style={styles.activityLogRow}>
+                        <View style={[styles.timelineIcon, { backgroundColor: definition?.color ?? '#ECEAE4' }]}>
+                          <AppIcon name={definition?.icon ?? 'activity'} size={15} color={C.ink} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.timelineDate}>{activityLabel(activity.type)}</Text>
+                          <Text style={styles.timelineDetail}>{activitySummary(activity)}</Text>
+                        </View>
+                        <AppIcon name="edit" size={15} color={C.muted} />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
+              <Pressable style={styles.secondaryAction} onPress={() => { setEditingActivity(undefined); setLogMode(status === 'complete' ? 'activity' : 'exclusion'); }}>
                 <AppIcon name="add" size={17} color={C.ink} />
-                <Text style={styles.secondaryActionText}>Add another activity</Text>
+                <Text style={styles.secondaryActionText}>{status === 'complete' ? 'Add another activity' : 'Update exclusion'}</Text>
               </Pressable>
             </>
           )}
@@ -1497,7 +1608,7 @@ function TodayScreen({ state, setState, accentColor }: { state: AppState; setSta
             const memberStatus = todaysStatus(state, member.id, today);
             return (
               <Pressable key={member.id} onPress={() => setState((current) => ({ ...current, selectedPlayerId: member.id }))} style={[styles.memberCard, member.id === player.id && styles.memberCardActive]}>
-                <Avatar player={member} size={38} />
+                <Avatar player={member} size={38} showPhoto={showProfilePhotos(state)} />
                 <Text style={styles.memberName}>{member.name}</Text>
                 <View style={[styles.statusDot, { backgroundColor: memberStatus === 'complete' ? '#7FB241' : memberStatus === 'excluded' ? C.orange : '#D5D4CF' }]} />
               </Pressable>
@@ -1528,14 +1639,51 @@ function TodayScreen({ state, setState, accentColor }: { state: AppState; setSta
             );
           })}
         </View>
+
+        <View style={styles.sectionHeading}>
+          <Text style={styles.sectionTitle}>Activity log</Text>
+          <Text style={styles.sectionMeta}>tap to edit</Text>
+        </View>
+        <View style={styles.timelineCard}>
+          {recentActivities.length === 0 ? (
+            <View style={styles.emptyResultRow}>
+              <AppIcon name="activity" size={20} color={C.muted} />
+              <Text style={styles.timelineDetail}>No activities logged yet.</Text>
+            </View>
+          ) : recentActivities.map((activity, index) => {
+            const definition = activityDefinitions.find((item) => item.id === activity.type);
+            return (
+              <Pressable key={activity.id} onPress={() => editActivity(activity)} style={[styles.timelineRow, index > 0 && styles.timelineBorder]}>
+                <View style={[styles.timelineIcon, { backgroundColor: definition?.color ?? '#ECEAE4' }]}>
+                  <AppIcon name={definition?.icon ?? 'activity'} size={15} color={C.ink} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.timelineDate}>{activityLabel(activity.type)} · {displayDate(activity.date)}</Text>
+                  <Text style={styles.timelineDetail}>{activitySummary(activity)}</Text>
+                </View>
+                <AppIcon name="edit" size={15} color={C.muted} />
+              </Pressable>
+            );
+          })}
+        </View>
       </ScrollView>
-      <ActivityModal visible={logMode === 'activity'} playerId={player.id} players={state.players} onClose={() => setLogMode(null)} onSave={saveActivity} />
+      <ActivityModal
+        visible={logMode === 'activity'}
+        playerId={player.id}
+        players={state.players}
+        activityToEdit={editingActivity}
+        resultToEdit={editingResult}
+        celebrations={state.theme?.celebrations !== false}
+        onClose={() => { setLogMode(null); setEditingActivity(undefined); }}
+        onSave={saveActivity}
+        onDelete={deleteActivity}
+      />
       <ExclusionModal visible={logMode === 'exclusion'} playerId={player.id} onClose={() => setLogMode(null)} onSave={saveExclusion} />
     </>
   );
 }
 
-function GroupScreen({ state }: { state: AppState }) {
+function GroupScreen({ state, compact }: { state: AppState; compact: boolean }) {
   const elapsed = elapsedChallengeDates();
   const standings = state.players
     .map((player) => {
@@ -1547,7 +1695,7 @@ function GroupScreen({ state }: { state: AppState }) {
     .sort((a, b) => b.currentRate - a.currentRate || b.progress.legWeeks - a.progress.legWeeks);
 
   return (
-    <ScrollView contentContainerStyle={styles.screenContent} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[styles.screenContent, compact && styles.screenContentCompact]} showsVerticalScrollIndicator={false}>
       <Header eyebrow="PEAK 25 · LIVE" title="Group progress" />
       <Text style={styles.leadCopy}>This is a pass/fail challenge. The ranking only shows who is currently closest to the contract target.</Text>
       <View style={styles.targetBanner}>
@@ -1569,7 +1717,7 @@ function GroupScreen({ state }: { state: AppState }) {
           return (
             <View key={entry.player.id} style={styles.rankingCard}>
               <Text style={styles.rankNumber}>{index + 1}</Text>
-              <Avatar player={entry.player} size={46} />
+              <Avatar player={entry.player} size={46} showPhoto={showProfilePhotos(state)} />
               <View style={{ flex: 1 }}>
                 <View style={styles.rankNameRow}>
                   <Text style={styles.rankName}>{entry.player.name}</Text>
@@ -1596,7 +1744,7 @@ function GroupScreen({ state }: { state: AppState }) {
   );
 }
 
-function StatisticsScreen({ state, accentColor }: { state: AppState; accentColor: string }) {
+function StatisticsScreen({ state, accentColor, compact }: { state: AppState; accentColor: string; compact: boolean }) {
   const stats = sportResultStats(state);
   const leader = stats.standings[0];
   const leaderPlayer = leader ? state.players.find((player) => player.id === leader.playerId) : undefined;
@@ -1605,7 +1753,7 @@ function StatisticsScreen({ state, accentColor }: { state: AppState; accentColor
   const latestResults = [...(state.sportResults ?? [])].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
 
   return (
-    <ScrollView contentContainerStyle={styles.screenContent} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[styles.screenContent, compact && styles.screenContentCompact]} showsVerticalScrollIndicator={false}>
         <Header eyebrow="MATCH RESULTS" title="Statistics" />
         <View style={styles.statsHero}>
           <View>
@@ -1626,7 +1774,7 @@ function StatisticsScreen({ state, accentColor }: { state: AppState; accentColor
             return (
               <View key={entry.playerId} style={styles.rankingCard}>
                 <Text style={styles.rankNumber}>{index + 1}</Text>
-                <Avatar player={player} size={46} />
+                <Avatar player={player} size={46} showPhoto={showProfilePhotos(state)} />
                 <View style={{ flex: 1 }}>
                   <View style={styles.rankNameRow}>
                     <Text style={styles.rankName}>{player.name}</Text>
@@ -1705,16 +1853,16 @@ function StatisticsScreen({ state, accentColor }: { state: AppState; accentColor
 
 const rules = [
   { icon: 'calendar', title: '6/7 eligible days', copy: 'Complete one valid activity on at least 6/7 of eligible days across the whole period—not week by week.' },
-  { icon: 'one', title: 'One activity per day', copy: 'Extra workouts on the same calendar day do not create extra credits.' },
+  { icon: 'one', title: 'One counted day', copy: 'Log as many activities as you want. A calendar day still creates one challenge credit.' },
   { icon: 'legDay', title: 'Weekly leg day', copy: 'The goal climbs as weeks arrive: week 1 is 1/1, week 2 is 2/2, until all challenge weeks are due.' },
   { icon: 'edit', title: 'Quick logging', copy: 'Choose an activity, pick the date, and enter only the stats needed for that activity type.' },
   { icon: 'wellness', title: 'Medical exclusions', copy: 'Genuine injury or significant illness removes affected days. Work, travel, studies and fatigue do not.' },
   { icon: 'cash', title: '1,000 SEK if you fail', copy: 'Each failed participant pays 1,000 SEK, divided equally among all successful participants.' },
 ];
 
-function RulesScreen() {
+function RulesScreen({ compact }: { compact: boolean }) {
   return (
-    <ScrollView contentContainerStyle={styles.screenContent} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[styles.screenContent, compact && styles.screenContentCompact]} showsVerticalScrollIndicator={false}>
       <Header eyebrow="SIGNED 1 SEPTEMBER 2026" title="Challenge rules" />
       <Text style={styles.leadCopy}>A clean reference based directly on the signed Peak 25 agreement.</Text>
       <View style={styles.periodCard}>
@@ -1753,12 +1901,22 @@ function SettingsScreen({
   setState,
   syncStatus,
   accentColor,
+  compact,
 }: {
   state: AppState;
   setState: React.Dispatch<React.SetStateAction<AppState>>;
   syncStatus: SyncStatus;
   accentColor: string;
+  compact: boolean;
 }) {
+  const darkMode = themeMode(state) === 'dark';
+  const updateTheme = (nextTheme: Partial<NonNullable<AppState['theme']>>) => {
+    setState((current) => ({
+      ...current,
+      theme: { accentColor: themeColor(current), ...current.theme, ...nextTheme },
+    }));
+  };
+
   const pickProfilePhoto = async (playerId: PlayerId) => {
     if (Platform.OS !== 'web') {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -1783,8 +1941,8 @@ function SettingsScreen({
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.screenContent} showsVerticalScrollIndicator={false}>
-      <Header eyebrow="PEAK 25" title="Your profile" />
+    <ScrollView contentContainerStyle={[styles.screenContent, compact && styles.screenContentCompact]} showsVerticalScrollIndicator={false}>
+      <Header eyebrow="PEAK 25" title="Profile & options" />
       <Text style={styles.leadCopy}>Choose who is using this phone. Activity and exclusion records sync across devices when the shared server is running.</Text>
       <Text style={styles.settingsLabel}>CHECKING IN AS</Text>
       <View style={styles.settingsCard}>
@@ -1794,7 +1952,7 @@ function SettingsScreen({
             onPress={() => setState((current) => ({ ...current, selectedPlayerId: player.id }))}
             style={[styles.settingsRow, index > 0 && styles.settingsBorder]}
           >
-            <Avatar player={player} size={42} />
+            <Avatar player={player} size={42} showPhoto={showProfilePhotos(state)} />
             <Text style={styles.settingsName}>{player.name}</Text>
             <AppIcon name={state.selectedPlayerId === player.id ? 'selected' : 'unselected'} size={23} color={state.selectedPlayerId === player.id ? C.ink : '#A6ADA9'} />
           </Pressable>
@@ -1805,7 +1963,7 @@ function SettingsScreen({
       <View style={styles.settingsCard}>
         {state.players.map((player, index) => (
           <View key={player.id} style={[styles.settingsRow, index > 0 && styles.settingsBorder]}>
-            <Avatar player={player} size={44} />
+            <Avatar player={player} size={44} showPhoto={showProfilePhotos(state)} />
             <View style={{ flex: 1 }}>
               <Text style={styles.settingsName}>{player.name}</Text>
               <Text style={styles.settingsSub}>{player.photoUri ? 'Photo selected' : 'Use a photo from your library'}</Text>
@@ -1817,7 +1975,59 @@ function SettingsScreen({
         ))}
       </View>
 
-      <Text style={styles.settingsLabel}>APP COLOR</Text>
+      <Text style={styles.settingsLabel}>OPTIONS</Text>
+      <View style={styles.settingsCard}>
+        <View style={styles.optionRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.settingsName}>Dark mode</Text>
+            <Text style={styles.settingsSub}>Use darker app chrome and navigation</Text>
+          </View>
+          <Switch
+            value={darkMode}
+            onValueChange={(value) => updateTheme({ mode: value ? 'dark' : 'light' })}
+            trackColor={{ false: '#D6D4CD', true: '#536660' }}
+            thumbColor={darkMode ? accentColor : '#FFFFFF'}
+          />
+        </View>
+        <View style={[styles.optionRow, styles.settingsBorder]}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.settingsName}>Compact cards</Text>
+            <Text style={styles.settingsSub}>Fit more rows on the screen</Text>
+          </View>
+          <Switch
+            value={isCompactTheme(state)}
+            onValueChange={(value) => updateTheme({ cardStyle: value ? 'compact' : 'soft' })}
+            trackColor={{ false: '#D6D4CD', true: '#93B753' }}
+            thumbColor={isCompactTheme(state) ? accentColor : '#FFFFFF'}
+          />
+        </View>
+        <View style={[styles.optionRow, styles.settingsBorder]}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.settingsName}>Show profile photos</Text>
+            <Text style={styles.settingsSub}>Use initials when this is off</Text>
+          </View>
+          <Switch
+            value={showProfilePhotos(state)}
+            onValueChange={(value) => updateTheme({ showPhotos: value })}
+            trackColor={{ false: '#D6D4CD', true: '#93B753' }}
+            thumbColor={showProfilePhotos(state) ? accentColor : '#FFFFFF'}
+          />
+        </View>
+        <View style={[styles.optionRow, styles.settingsBorder]}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.settingsName}>Celebrations</Text>
+            <Text style={styles.settingsSub}>Keep success feedback turned on</Text>
+          </View>
+          <Switch
+            value={state.theme?.celebrations !== false}
+            onValueChange={(value) => updateTheme({ celebrations: value })}
+            trackColor={{ false: '#D6D4CD', true: '#93B753' }}
+            thumbColor={state.theme?.celebrations !== false ? accentColor : '#FFFFFF'}
+          />
+        </View>
+      </View>
+
+      <Text style={styles.settingsLabel}>ACCENT COLOR</Text>
       <View style={styles.colorCard}>
         {themeChoices.map((color) => {
           const active = color.toLowerCase() === accentColor.toLowerCase();
@@ -1826,7 +2036,7 @@ function SettingsScreen({
               key={color}
               accessibilityRole="button"
               accessibilityLabel={`Use color ${color}`}
-              onPress={() => setState((current) => ({ ...current, theme: { accentColor: color } }))}
+              onPress={() => updateTheme({ accentColor: color })}
               style={[styles.colorSwatchButton, active && styles.colorSwatchButtonActive]}
             >
               <View style={[styles.colorSwatch, { backgroundColor: color }]} />
@@ -1867,7 +2077,7 @@ function SettingsScreen({
   );
 }
 
-function BottomNav({ tab, setTab, accentColor }: { tab: Tab; setTab: (tab: Tab) => void; accentColor: string }) {
+function BottomNav({ tab, setTab, accentColor, darkMode }: { tab: Tab; setTab: (tab: Tab) => void; accentColor: string; darkMode: boolean }) {
   const items: { id: Tab; label: string; icon: string }[] = [
     { id: 'today', label: 'Today', icon: 'checkCircle' },
     { id: 'group', label: 'Group', icon: 'group' },
@@ -1876,13 +2086,13 @@ function BottomNav({ tab, setTab, accentColor }: { tab: Tab; setTab: (tab: Tab) 
     { id: 'settings', label: 'Profile', icon: 'profile' },
   ];
   return (
-    <View style={styles.bottomNav}>
+    <View style={[styles.bottomNav, darkMode && styles.bottomNavDark]}>
       {items.map((item) => {
         const active = item.id === tab;
         return (
           <Pressable key={item.id} onPress={() => setTab(item.id)} style={styles.navItem}>
             <View style={[styles.navIconWrap, active && styles.navIconActive, active && { backgroundColor: accentColor }]}><AppIcon name={item.icon} size={21} color={active ? C.ink : '#7D8581'} /></View>
-            <Text style={[styles.navLabel, active && styles.navLabelActive]}>{item.label}</Text>
+            <Text style={[styles.navLabel, darkMode && styles.navLabelDark, active && styles.navLabelActive]}>{item.label}</Text>
           </Pressable>
         );
       })}
@@ -1904,6 +2114,8 @@ function AppContent() {
   const lastSyncedSnapshotRef = useRef('');
   const pushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const accentColor = themeColor(state);
+  const compact = isCompactTheme(state);
+  const darkMode = themeMode(state) === 'dark';
 
   const applyRemoteState = (remote: { activities: Activity[]; exclusions: AppState['exclusions']; sportResults?: SportResult[]; revision: number; updatedAt: string }) => {
     const nextSnapshot = sharedSnapshot({ ...remote, sportResults: remote.sportResults ?? [] });
@@ -1993,19 +2205,19 @@ function AppContent() {
   }, [state.activities, state.exclusions, state.sportResults, ready, remoteReady]);
 
   const screen = useMemo(() => {
-    if (tab === 'group') return <GroupScreen state={state} />;
-    if (tab === 'statistics') return <StatisticsScreen state={state} accentColor={accentColor} />;
-    if (tab === 'rules') return <RulesScreen />;
-    if (tab === 'settings') return <SettingsScreen state={state} setState={setState} syncStatus={syncStatus} accentColor={accentColor} />;
-    return <TodayScreen state={state} setState={setState} accentColor={accentColor} />;
-  }, [accentColor, state, syncStatus, tab]);
+    if (tab === 'group') return <GroupScreen state={state} compact={compact} />;
+    if (tab === 'statistics') return <StatisticsScreen state={state} accentColor={accentColor} compact={compact} />;
+    if (tab === 'rules') return <RulesScreen compact={compact} />;
+    if (tab === 'settings') return <SettingsScreen state={state} setState={setState} syncStatus={syncStatus} accentColor={accentColor} compact={compact} />;
+    return <TodayScreen state={state} setState={setState} accentColor={accentColor} compact={compact} />;
+  }, [accentColor, compact, state, syncStatus, tab]);
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      <StatusBar style="dark" />
-      <View style={styles.appShell}>
+    <SafeAreaView style={[styles.safeArea, darkMode && styles.safeAreaDark]} edges={['top', 'left', 'right']}>
+      <StatusBar style={darkMode ? 'light' : 'dark'} />
+      <View style={[styles.appShell, darkMode && styles.appShellDark]}>
         {screen}
-        <BottomNav tab={tab} setTab={setTab} accentColor={accentColor} />
+        <BottomNav tab={tab} setTab={setTab} accentColor={accentColor} darkMode={darkMode} />
       </View>
     </SafeAreaView>
   );
@@ -2017,8 +2229,11 @@ export default function App() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: C.paper },
+  safeAreaDark: { backgroundColor: '#101817' },
   appShell: { flex: 1, backgroundColor: C.paper, width: '100%', maxWidth: 520, alignSelf: 'center' },
+  appShellDark: { backgroundColor: '#101817' },
   screenContent: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 126 },
+  screenContentCompact: { paddingTop: 12, paddingBottom: 102 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 },
   eyebrow: { color: C.muted, fontSize: 11, letterSpacing: 1.35, fontWeight: '800', marginBottom: 6 },
   pageTitle: { color: C.ink, fontSize: 31, lineHeight: 36, letterSpacing: -1.1, fontWeight: '800' },
@@ -2044,6 +2259,7 @@ const styles = StyleSheet.create({
   cardEyebrow: { color: C.muted, fontSize: 9, fontWeight: '800', letterSpacing: 1.1, marginBottom: 5 },
   todayTitle: { color: C.ink, fontSize: 21, fontWeight: '900', letterSpacing: -0.4 },
   todayCopy: { color: C.muted, fontSize: 13, lineHeight: 19, marginTop: 10 },
+  todayActivityList: { marginTop: 12, borderRadius: 17, overflow: 'hidden', borderWidth: 1, borderColor: C.line },
   statusPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6, paddingHorizontal: 9, borderRadius: 12 },
   statusText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
   primaryAction: { height: 50, borderRadius: 16, marginTop: 16, backgroundColor: C.lime, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
@@ -2067,6 +2283,7 @@ const styles = StyleSheet.create({
   statusDot: { width: 7, height: 7, borderRadius: 4, marginTop: 6 },
   timelineCard: { backgroundColor: C.card, borderRadius: 22, overflow: 'hidden', paddingHorizontal: 15 },
   timelineRow: { minHeight: 63, flexDirection: 'row', alignItems: 'center', gap: 11 },
+  activityLogRow: { minHeight: 58, backgroundColor: '#FAF9F4', flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.line },
   timelineBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.line },
   timelineIcon: { width: 31, height: 31, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   timelineComplete: { backgroundColor: C.lime },
@@ -2117,6 +2334,7 @@ const styles = StyleSheet.create({
   settingsLabel: { color: C.muted, fontSize: 10, letterSpacing: 1.2, fontWeight: '800', marginTop: 14, marginBottom: 9 },
   settingsCard: { backgroundColor: C.card, borderRadius: 21, overflow: 'hidden', paddingHorizontal: 15 },
   settingsRow: { minHeight: 66, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  optionRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 12 },
   settingsBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.line },
   settingsName: { color: C.ink, fontSize: 14, fontWeight: '800', flex: 1 },
   settingsSub: { color: C.muted, fontSize: 10, marginTop: 2 },
@@ -2135,10 +2353,12 @@ const styles = StyleSheet.create({
   resetButton: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 27, padding: 15 },
   resetText: { color: C.danger, fontSize: 12, fontWeight: '800' },
   bottomNav: { position: 'absolute', left: 13, right: 13, bottom: 11, height: 76, borderRadius: 25, backgroundColor: C.card, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 6, shadowColor: '#22302B', shadowOpacity: 0.13, shadowRadius: 22, shadowOffset: { width: 0, height: 8 }, elevation: 12 },
+  bottomNavDark: { backgroundColor: '#1A2522', shadowOpacity: 0.28 },
   navItem: { flex: 1, alignItems: 'center', gap: 3 },
   navIconWrap: { width: 40, height: 30, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   navIconActive: { backgroundColor: C.lime },
   navLabel: { color: '#7D8581', fontSize: 9, fontWeight: '700' },
+  navLabelDark: { color: '#A8B2AD' },
   navLabelActive: { color: C.ink, fontWeight: '900' },
   modalPage: { flex: 1, backgroundColor: C.paper },
   modalHeader: { height: 62, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.line },
@@ -2244,6 +2464,7 @@ const styles = StyleSheet.create({
   saveButton: { height: 52, borderRadius: 17, backgroundColor: C.ink, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16 },
   saveButtonDisabled: { opacity: 0.35 },
   saveButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
+  deleteButton: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 9, padding: 12 },
   exclusionNotice: { backgroundColor: '#FFE8C8', borderRadius: 18, padding: 15, flexDirection: 'row', alignItems: 'flex-start', gap: 11 },
   exclusionNoticeText: { color: '#65431F', flex: 1, fontSize: 12, lineHeight: 18, fontWeight: '700' },
   approvalNote: { color: C.muted, fontSize: 10, lineHeight: 15, marginTop: 13 },

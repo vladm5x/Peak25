@@ -43,6 +43,7 @@ export type Exclusion = {
 
 export type SportResult = {
   id: string;
+  activityId?: string;
   date: string;
   sport: ActivityType;
   winnerId: PlayerId;
@@ -64,6 +65,10 @@ export type AppState = {
   sportResults: SportResult[];
   theme?: {
     accentColor: string;
+    mode?: 'light' | 'dark';
+    cardStyle?: 'soft' | 'compact';
+    showPhotos?: boolean;
+    celebrations?: boolean;
   };
 };
 
