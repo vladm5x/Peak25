@@ -40,11 +40,27 @@ export type Exclusion = {
   excludesLegWeek: boolean;
 };
 
+export type SportResult = {
+  id: string;
+  date: string;
+  sport: ActivityType;
+  winnerId: PlayerId;
+  participantIds: PlayerId[];
+  scores: Partial<Record<PlayerId, number>>;
+  rounds?: {
+    id: string;
+    label: string;
+    scores: Partial<Record<PlayerId, number>>;
+  }[];
+  note?: string;
+};
+
 export type AppState = {
   selectedPlayerId: PlayerId;
   players: Player[];
   activities: Activity[];
   exclusions: Exclusion[];
+  sportResults: SportResult[];
 };
 
 export type ActivityDefinition = {

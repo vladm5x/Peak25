@@ -1,8 +1,9 @@
-import { Activity, Exclusion, PlayerId } from './types';
+import { Activity, Exclusion, PlayerId, SportResult } from './types';
 
 export type SharedChallengeState = {
   activities: Activity[];
   exclusions: Exclusion[];
+  sportResults: SportResult[];
 };
 
 export type RemoteSyncState = SharedChallengeState & {
@@ -17,6 +18,19 @@ type SupabaseDailyRecord = {
   record_date: string;
   record_type: 'activity' | 'exclusion';
   payload: Activity | Exclusion;
+  updated_at: string;
+};
+
+type SupabaseSportResultRecord = {
+  result_id: string;
+  challenge_id: string;
+  result_date: string;
+  sport: string;
+  winner_id: PlayerId;
+  participant_ids: PlayerId[];
+  scores: Partial<Record<PlayerId, number>>;
+  score_rounds: SportResult['rounds'] | null;
+  note: string | null;
   updated_at: string;
 };
 
@@ -49,13 +63,14 @@ export const syncLabel = syncProvider === 'supabase' ? 'Supabase cloud sync' : s
 export const syncUrl = hasSupabase ? configuredSupabaseUrl : localSyncUrl;
 
 export const sharedSnapshot = (state: SharedChallengeState) =>
-  JSON.stringify({ activities: state.activities, exclusions: state.exclusions });
+  JSON.stringify({ activities: state.activities, exclusions: state.exclusions, sportResults: state.sportResults ?? [] });
 
 const recordKey = (record: Activity | Exclusion) => `${record.playerId}:${record.date}`;
 
-const rowsToRemoteState = (rows: SupabaseDailyRecord[]): RemoteSyncState => {
+const rowsToRemoteState = (rows: SupabaseDailyRecord[], resultRows: SupabaseSportResultRecord[] = []): RemoteSyncState => {
   const activities: Activity[] = [];
   const exclusions: Exclusion[] = [];
+  const sportResults: SportResult[] = [];
   let latestUpdatedAt = '';
 
   rows.forEach((row) => {
@@ -75,10 +90,25 @@ const rowsToRemoteState = (rows: SupabaseDailyRecord[]): RemoteSyncState => {
     }
   });
 
+  resultRows.forEach((row) => {
+    if (!latestUpdatedAt || row.updated_at > latestUpdatedAt) latestUpdatedAt = row.updated_at;
+    sportResults.push({
+      id: row.result_id,
+      date: row.result_date,
+      sport: row.sport as SportResult['sport'],
+      winnerId: row.winner_id,
+      participantIds: row.participant_ids,
+      scores: row.scores,
+      rounds: row.score_rounds ?? undefined,
+      note: row.note ?? undefined,
+    });
+  });
+
   const updatedAt = latestUpdatedAt || new Date().toISOString();
   return {
     activities,
     exclusions,
+    sportResults,
     revision: Date.parse(updatedAt) || 0,
     updatedAt,
   };
@@ -117,6 +147,22 @@ const stateToRows = (state: SharedChallengeState): SupabaseDailyRecord[] => {
   return [...rows.values()];
 };
 
+const sportResultsToRows = (state: SharedChallengeState): SupabaseSportResultRecord[] => {
+  const updatedAt = new Date().toISOString();
+  return (state.sportResults ?? []).map((result) => ({
+    result_id: result.id,
+    challenge_id: CHALLENGE_ID,
+    result_date: result.date,
+    sport: result.sport,
+    winner_id: result.winnerId,
+    participant_ids: result.participantIds,
+    scores: result.scores,
+    score_rounds: result.rounds ?? null,
+    note: result.note ?? null,
+    updated_at: updatedAt,
+  }));
+};
+
 async function fetchSupabaseState() {
   if (!configuredSupabaseUrl || !configuredSupabaseKey) throw new Error('No Supabase project configured');
   const params = new URLSearchParams({
@@ -131,7 +177,18 @@ async function fetchSupabaseState() {
   });
 
   if (!response.ok) throw new Error(`Supabase fetch failed (${response.status})`);
-  return rowsToRemoteState((await response.json()) as SupabaseDailyRecord[]);
+  const resultParams = new URLSearchParams({
+    challenge_id: `eq.${CHALLENGE_ID}`,
+    select: 'result_id,challenge_id,result_date,sport,winner_id,participant_ids,scores,score_rounds,note,updated_at',
+  });
+  const resultResponse = await fetch(`${configuredSupabaseUrl}/rest/v1/peak25_sport_results?${resultParams.toString()}`, {
+    headers: {
+      apikey: configuredSupabaseKey,
+      Authorization: `Bearer ${configuredSupabaseKey}`,
+    },
+  });
+  const resultRows = resultResponse.ok ? ((await resultResponse.json()) as SupabaseSportResultRecord[]) : [];
+  return rowsToRemoteState((await response.json()) as SupabaseDailyRecord[], resultRows);
 }
 
 async function pushSupabaseState(state: SharedChallengeState) {
@@ -150,6 +207,21 @@ async function pushSupabaseState(state: SharedChallengeState) {
     });
 
     if (!response.ok) throw new Error(`Supabase save failed (${response.status})`);
+  }
+  const resultRows = sportResultsToRows(state);
+  if (resultRows.length > 0) {
+    const response = await fetch(`${configuredSupabaseUrl}/rest/v1/peak25_sport_results?on_conflict=result_id`, {
+      method: 'POST',
+      headers: {
+        apikey: configuredSupabaseKey,
+        Authorization: `Bearer ${configuredSupabaseKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify(resultRows),
+    });
+
+    if (!response.ok) throw new Error(`Supabase sport-result save failed (${response.status})`);
   }
   return fetchSupabaseState();
 }

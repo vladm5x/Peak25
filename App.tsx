@@ -6,6 +6,7 @@ import {
   Activity as PulseIcon,
   AlertCircle,
   Banknote,
+  BarChart3,
   Bike,
   Calendar,
   Check,
@@ -70,6 +71,7 @@ import {
   CHALLENGE_START,
   createActivityId,
   createExclusionId,
+  createSportResultId,
   elapsedChallengeDates,
   getDateKey,
   initialState,
@@ -77,16 +79,20 @@ import {
   isoWeekKey,
   parseDate,
   playerProgress,
+  sportResultDefinitions,
+  sportResultStats,
+  sportResultTotalScores,
   STORAGE_KEY,
   todayWithinChallenge,
   todaysStatus,
   upsertActivity,
   upsertExclusion,
+  upsertSportResult,
   withSeedActivities,
 } from './src/data';
 import { seedImportMeta } from './src/seedData';
 import { fetchRemoteState, pushRemoteState, sharedSnapshot, syncLabel, syncUrl } from './src/sync';
-import { Activity, ActivityType, AppState, Player, PlayerId } from './src/types';
+import { Activity, ActivityType, AppState, Player, PlayerId, SportResult } from './src/types';
 
 const C = {
   ink: '#14201F',
@@ -101,7 +107,7 @@ const C = {
   danger: '#B44E4E',
 };
 
-type Tab = 'today' | 'group' | 'rules' | 'settings';
+type Tab = 'today' | 'group' | 'statistics' | 'rules' | 'settings';
 type LogMode = 'activity' | 'exclusion' | null;
 type SyncStatus = {
   state: 'connecting' | 'synced' | 'saving' | 'offline';
@@ -113,6 +119,7 @@ const iconMap: Record<string, LucideIcon> = {
   add: PlusCircle,
   alert: AlertCircle,
   cash: Banknote,
+  chart: BarChart3,
   calendar: Calendar,
   check: Check,
   checkCircle: CheckCircle2,
@@ -521,16 +528,191 @@ function DatePickerField({ label, value, onChange }: { label: string; value: str
   );
 }
 
+type ScoreRoundDraft = {
+  id: string;
+  label: string;
+  scores: Partial<Record<PlayerId, string>>;
+};
+
+const scoreRoundLabel = (sport: ActivityType) => {
+  if (sport === 'tennis' || sport === 'padel') return 'Set';
+  if (sport === 'golf') return 'Hole';
+  if (sport === 'running' || sport === 'cycling' || sport === 'swimming' || sport === 'stairmaster') return 'Split';
+  return 'Game';
+};
+
+const scoreRoundPluralLabel = (sport: ActivityType) => `${scoreRoundLabel(sport)}s`;
+
+const initialScoreRounds = (sport: ActivityType): ScoreRoundDraft[] => [
+  { id: `${Date.now()}-1`, label: `${scoreRoundLabel(sport)} 1`, scores: {} },
+];
+
+const scoreInputPlaceholder = (sport: ActivityType, index: number) => {
+  if (sport === 'tennis' || sport === 'padel') return index === 0 ? '6' : '4';
+  if (sport === 'golf') return '4';
+  return '0';
+};
+
+const totalDraftScores = (rounds: ScoreRoundDraft[], participantIds: PlayerId[]) =>
+  rounds.reduce<Partial<Record<PlayerId, number>>>((totals, round) => {
+    participantIds.forEach((playerId) => {
+      const raw = round.scores[playerId];
+      const value = Number(raw);
+      if (raw?.trim() && Number.isFinite(value)) totals[playerId] = (totals[playerId] ?? 0) + value;
+    });
+    return totals;
+  }, {});
+
+function ScoreEditor({
+  sport,
+  players,
+  selectedPlayerId,
+  enabled,
+  onEnabledChange,
+  participantIds,
+  onParticipantIdsChange,
+  winnerId,
+  onWinnerIdChange,
+  rounds,
+  onRoundsChange,
+}: {
+  sport: ActivityType;
+  players: Player[];
+  selectedPlayerId: PlayerId;
+  enabled: boolean;
+  onEnabledChange: (value: boolean) => void;
+  participantIds: PlayerId[];
+  onParticipantIdsChange: (ids: PlayerId[]) => void;
+  winnerId: PlayerId;
+  onWinnerIdChange: (id: PlayerId) => void;
+  rounds: ScoreRoundDraft[];
+  onRoundsChange: (rounds: ScoreRoundDraft[]) => void;
+}) {
+  const roundName = scoreRoundLabel(sport);
+  const selectedPlayers = players.filter((player) => participantIds.includes(player.id));
+  const totals = totalDraftScores(rounds, participantIds);
+
+  const toggleParticipant = (playerId: PlayerId) => {
+    const next = participantIds.includes(playerId)
+      ? participantIds.filter((id) => id !== playerId)
+      : [...participantIds, playerId];
+    const withCurrentPlayer = next.includes(selectedPlayerId) ? next : [...next, selectedPlayerId];
+    onParticipantIdsChange(withCurrentPlayer);
+    if (!withCurrentPlayer.includes(winnerId)) onWinnerIdChange(withCurrentPlayer[0] ?? selectedPlayerId);
+  };
+
+  const updateRoundScore = (roundId: string, playerId: PlayerId, value: string) => {
+    onRoundsChange(rounds.map((round) => (
+      round.id === roundId
+        ? { ...round, scores: { ...round.scores, [playerId]: value.replace(',', '.') } }
+        : round
+    )));
+  };
+
+  const addRound = () => {
+    onRoundsChange([
+      ...rounds,
+      { id: `${Date.now()}-${rounds.length + 1}`, label: `${roundName} ${rounds.length + 1}`, scores: {} },
+    ]);
+  };
+
+  const removeRound = (roundId: string) => {
+    if (rounds.length <= 1) return;
+    onRoundsChange(rounds.filter((round) => round.id !== roundId).map((round, index) => ({ ...round, label: `${roundName} ${index + 1}` })));
+  };
+
+  return (
+    <>
+      <Text style={styles.fieldLabel}>SCORE</Text>
+      <ToggleRow label="Record match score" value={enabled} onChange={onEnabledChange} />
+      {enabled && (
+        <View style={styles.scoreBuilder}>
+          <Text style={styles.scoreBuilderTitle}>Players</Text>
+          <View style={styles.playerSelectGrid}>
+            {players.map((player) => {
+              const active = participantIds.includes(player.id);
+              const locked = player.id === selectedPlayerId;
+              return (
+                <Pressable key={player.id} disabled={locked} onPress={() => toggleParticipant(player.id)} style={[styles.playerSelectCard, active && styles.playerSelectCardActive, locked && styles.playerSelectCardLocked]}>
+                  <Avatar player={player} size={34} />
+                  <Text style={styles.playerSelectName}>{player.name}</Text>
+                  <AppIcon name={active ? 'checkCircle' : 'unselected'} size={18} color={active ? C.ink : '#9EA5A1'} />
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Text style={styles.scoreBuilderTitle}>Winner</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {selectedPlayers.map((player) => {
+              const active = player.id === winnerId;
+              return (
+                <Pressable key={player.id} onPress={() => onWinnerIdChange(player.id)} style={[styles.chip, active && styles.chipActive]}>
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{player.name}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          <View style={styles.scoreRoundsHeader}>
+            <Text style={styles.scoreBuilderTitle}>{scoreRoundPluralLabel(sport)}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Add ${roundName.toLowerCase()}`} onPress={addRound} style={styles.roundAddButton}>
+              <AppIcon name="plus" size={17} color={C.ink} />
+            </Pressable>
+          </View>
+
+          <View style={styles.roundList}>
+            {rounds.map((round) => (
+              <View key={round.id} style={styles.roundCard}>
+                <View style={styles.roundTitleRow}>
+                  <Text style={styles.roundTitle}>{round.label}</Text>
+                  {rounds.length > 1 && (
+                    <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${round.label}`} onPress={() => removeRound(round.id)} style={styles.roundRemoveButton}>
+                      <AppIcon name="minus" size={15} color={C.muted} />
+                    </Pressable>
+                  )}
+                </View>
+                <View style={styles.roundScoreGrid}>
+                  {selectedPlayers.map((player, index) => (
+                    <View key={player.id} style={styles.roundScoreCell}>
+                      <Text style={styles.roundScoreName}>{player.name}</Text>
+                      <TextInput
+                        style={styles.roundScoreInput}
+                        value={round.scores[player.id] ?? ''}
+                        onChangeText={(value) => updateRoundScore(round.id, player.id, value)}
+                        placeholder={scoreInputPlaceholder(sport, index)}
+                        keyboardType="decimal-pad"
+                      />
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.scoreTotalsRow}>
+            {selectedPlayers.map((player) => (
+              <Text key={player.id} style={styles.scoreTotalText}>{player.name}: {totals[player.id] ?? 0}</Text>
+            ))}
+          </View>
+        </View>
+      )}
+    </>
+  );
+}
+
 function ActivityModal({
   visible,
   playerId,
+  players,
   onClose,
   onSave,
 }: {
   visible: boolean;
   playerId: PlayerId;
+  players: Player[];
   onClose: () => void;
-  onSave: (activity: Activity) => void;
+  onSave: (activity: Activity, result?: SportResult) => void;
 }) {
   const [type, setType] = useState<ActivityType>('gym');
   const [date, setDate] = useState(todayWithinChallenge());
@@ -539,11 +721,19 @@ function ActivityModal({
   const [distance, setDistance] = useState('');
   const [holes, setHoles] = useState('');
   const [walkedGolf, setWalkedGolf] = useState(true);
+  const [recordScore, setRecordScore] = useState(false);
+  const [participantIds, setParticipantIds] = useState<PlayerId[]>([playerId]);
+  const [winnerId, setWinnerId] = useState<PlayerId>(playerId);
+  const [scoreRounds, setScoreRounds] = useState<ScoreRoundDraft[]>(() => initialScoreRounds('padel'));
   useEffect(() => {
     if (visible) {
       setDate(todayWithinChallenge());
+      setRecordScore(false);
+      setParticipantIds([playerId]);
+      setWinnerId(playerId);
+      setScoreRounds(initialScoreRounds(type));
     }
-  }, [visible]);
+  }, [playerId, type, visible]);
 
   const candidate = {
     date,
@@ -557,20 +747,51 @@ function ActivityModal({
   };
   const dateValid = date >= CHALLENGE_START && date <= CHALLENGE_END && /^\d{4}-\d{2}-\d{2}$/.test(date);
   const qualifies = isActivityValid(candidate);
-  const canSave = dateValid && qualifies;
+  const canRecordScore = sportResultDefinitions.some((item) => item.id === type);
+  const scoreReady = !recordScore || (participantIds.length >= 2 && participantIds.includes(winnerId));
+  const canSave = dateValid && qualifies && scoreReady;
   const selectedDefinition = activityDefinitions.find((item) => item.id === type)!;
 
   const selectActivityType = (nextType: ActivityType) => {
     setType(nextType);
+    setRecordScore(false);
+    setScoreRounds(initialScoreRounds(nextType));
     if (nextType === 'golf') {
       setHoles((current) => current || '9');
       setWalkedGolf(true);
     }
   };
 
+  const setScoreEnabled = (enabled: boolean) => {
+    setRecordScore(enabled);
+    if (enabled && participantIds.length < 2) {
+      const opponent = players.find((player) => player.id !== playerId)?.id;
+      setParticipantIds(opponent ? [playerId, opponent] : [playerId]);
+      setWinnerId(playerId);
+    }
+  };
+
   const save = () => {
     if (!canSave) return;
-    onSave({ ...candidate, id: createActivityId(playerId, date), playerId });
+    const result = recordScore && canRecordScore ? {
+      id: createSportResultId(type, date),
+      date,
+      sport: type,
+      winnerId,
+      participantIds,
+      scores: totalDraftScores(scoreRounds, participantIds),
+      rounds: scoreRounds.map((round) => ({
+        id: round.id,
+        label: round.label,
+        scores: participantIds.reduce<Partial<Record<PlayerId, number>>>((acc, participantId) => {
+          const value = Number(round.scores[participantId]);
+          if (round.scores[participantId]?.trim() && Number.isFinite(value)) acc[participantId] = value;
+          return acc;
+        }, {}),
+      })),
+      note: `${selectedDefinition.label} score logged with activity`,
+    } satisfies SportResult : undefined;
+    onSave({ ...candidate, id: createActivityId(playerId, date), playerId }, result);
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     onClose();
   };
@@ -654,6 +875,22 @@ function ActivityModal({
               />
               <ToggleRow label="I walked and carried or used a trolley" value={walkedGolf} onChange={setWalkedGolf} />
             </>
+          )}
+
+          {canRecordScore && (
+            <ScoreEditor
+              sport={type}
+              players={players}
+              selectedPlayerId={playerId}
+              enabled={recordScore}
+              onEnabledChange={setScoreEnabled}
+              participantIds={participantIds}
+              onParticipantIdsChange={setParticipantIds}
+              winnerId={winnerId}
+              onWinnerIdChange={setWinnerId}
+              rounds={scoreRounds}
+              onRoundsChange={setScoreRounds}
+            />
           )}
 
           <View style={[styles.validationBox, qualifies ? styles.validationGood : styles.validationBad]}>
@@ -979,6 +1216,150 @@ function ExclusionModal({
   );
 }
 
+function ResultModal({
+  visible,
+  players,
+  onClose,
+  onSave,
+}: {
+  visible: boolean;
+  players: Player[];
+  onClose: () => void;
+  onSave: (result: SportResult) => void;
+}) {
+  const [sport, setSport] = useState<ActivityType>('padel');
+  const [date, setDate] = useState(todayWithinChallenge());
+  const [participantIds, setParticipantIds] = useState<PlayerId[]>(() => players.map((player) => player.id));
+  const [winnerId, setWinnerId] = useState<PlayerId>(players[0]?.id ?? 'vlad');
+  const [scores, setScores] = useState<Partial<Record<PlayerId, string>>>({});
+  const [note, setNote] = useState('');
+
+  useEffect(() => {
+    if (!visible) return;
+    setDate(todayWithinChallenge());
+    setParticipantIds(players.map((player) => player.id));
+    setWinnerId(players[0]?.id ?? 'vlad');
+    setScores({});
+    setNote('');
+  }, [players, visible]);
+
+  const toggleParticipant = (playerId: PlayerId) => {
+    setParticipantIds((current) => {
+      const next = current.includes(playerId) ? current.filter((id) => id !== playerId) : [...current, playerId];
+      if (!next.includes(winnerId) && next[0]) setWinnerId(next[0]);
+      return next;
+    });
+  };
+
+  const dateValid = date >= CHALLENGE_START && date <= CHALLENGE_END && /^\d{4}-\d{2}-\d{2}$/.test(date);
+  const canSave = dateValid && participantIds.length >= 2 && participantIds.includes(winnerId);
+  const selectedSport = sportResultDefinitions.find((item) => item.id === sport) ?? sportResultDefinitions[0]!;
+
+  const save = () => {
+    if (!canSave) return;
+    const numericScores = participantIds.reduce<Partial<Record<PlayerId, number>>>((acc, playerId) => {
+      const value = Number(scores[playerId]);
+      if (scores[playerId]?.trim() && Number.isFinite(value)) acc[playerId] = value;
+      return acc;
+    }, {});
+    onSave({
+      id: createSportResultId(sport, date),
+      date,
+      sport,
+      winnerId,
+      participantIds,
+      scores: numericScores,
+      note: note.trim() || undefined,
+    });
+    if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    onClose();
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <SafeAreaView style={styles.modalPage} edges={['top', 'bottom']}>
+        <View style={styles.modalHeader}>
+          <Pressable onPress={onClose} style={styles.closeButton}><AppIcon name="close" size={22} color={C.ink} /></Pressable>
+          <Text style={styles.modalHeading}>Log result</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <ScrollView contentContainerStyle={styles.modalContent} showsVerticalScrollIndicator={false}>
+          <Text style={styles.fieldLabel}>SPORT</Text>
+          <View style={styles.activityGrid}>
+            {sportResultDefinitions.map((item) => {
+              const active = item.id === sport;
+              return (
+                <Pressable key={item.id} onPress={() => setSport(item.id)} style={[styles.activityChoice, active && styles.activityChoiceActive]}>
+                  <View style={[styles.activityChoiceIcon, { backgroundColor: item.color }]}>
+                    <AppIcon name={item.icon} size={20} color={C.ink} />
+                  </View>
+                  <Text style={styles.activityChoiceLabel}>{item.label}</Text>
+                  {active && <AppIcon name="checkCircle" size={18} color={C.ink} />}
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <DatePickerField label="RESULT DATE" value={date} onChange={setDate} />
+
+          <Text style={styles.fieldLabel}>PLAYERS</Text>
+          <View style={styles.playerSelectGrid}>
+            {players.map((player) => {
+              const active = participantIds.includes(player.id);
+              return (
+                <Pressable key={player.id} onPress={() => toggleParticipant(player.id)} style={[styles.playerSelectCard, active && styles.playerSelectCardActive]}>
+                  <Avatar player={player} size={34} />
+                  <Text style={styles.playerSelectName}>{player.name}</Text>
+                  <AppIcon name={active ? 'checkCircle' : 'unselected'} size={18} color={active ? C.ink : '#9EA5A1'} />
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Text style={styles.fieldLabel}>WINNER</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {players.filter((player) => participantIds.includes(player.id)).map((player) => {
+              const active = player.id === winnerId;
+              return (
+                <Pressable key={player.id} onPress={() => setWinnerId(player.id)} style={[styles.chip, active && styles.chipActive]}>
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{player.name}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          <Text style={styles.fieldLabel}>SCORES</Text>
+          <View style={styles.scoreCard}>
+            {players.filter((player) => participantIds.includes(player.id)).map((player, index) => (
+              <View key={player.id} style={[styles.scoreRow, index > 0 && styles.scoreBorder]}>
+                <View style={styles.scorePlayer}>
+                  <Avatar player={player} size={32} />
+                  <Text style={styles.scoreName}>{player.name}</Text>
+                </View>
+                <TextInput
+                  style={styles.scoreInput}
+                  value={scores[player.id] ?? ''}
+                  onChangeText={(value) => setScores((current) => ({ ...current, [player.id]: value.replace(',', '.') }))}
+                  placeholder="0"
+                  keyboardType="decimal-pad"
+                />
+              </View>
+            ))}
+          </View>
+
+          <Text style={styles.fieldLabel}>NOTE</Text>
+          <TextInput style={[styles.input, styles.notesInput]} value={note} onChangeText={setNote} placeholder={`What happened in ${selectedSport.label.toLowerCase()}?`} multiline />
+
+          <Pressable onPress={save} disabled={!canSave} style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}>
+            <AppIcon name="trophy" size={19} color="#FFFFFF" />
+            <Text style={styles.saveButtonText}>Save result</Text>
+          </Pressable>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
 function TodayScreen({ state, setState }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>> }) {
   const [logMode, setLogMode] = useState<LogMode>(null);
   const player = state.players.find((item) => item.id === state.selectedPlayerId) ?? state.players[0]!;
@@ -991,12 +1372,13 @@ function TodayScreen({ state, setState }: { state: AppState; setState: React.Dis
   const todayDefinition = todayActivity ? activityDefinitions.find((item) => item.id === todayActivity.type) : undefined;
   const recentDates = elapsedChallengeDates().slice(-7).reverse();
 
-  const saveActivity = (activity: Activity) => {
+  const saveActivity = (activity: Activity, result?: SportResult) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setState((current) => ({
       ...current,
       activities: upsertActivity(current.activities, activity),
       exclusions: current.exclusions.filter((item) => !(item.playerId === activity.playerId && item.date === activity.date)),
+      sportResults: result ? upsertSportResult(current.sportResults ?? [], result) : current.sportResults,
     }));
   };
 
@@ -1119,7 +1501,7 @@ function TodayScreen({ state, setState }: { state: AppState; setState: React.Dis
           })}
         </View>
       </ScrollView>
-      <ActivityModal visible={logMode === 'activity'} playerId={player.id} onClose={() => setLogMode(null)} onSave={saveActivity} />
+      <ActivityModal visible={logMode === 'activity'} playerId={player.id} players={state.players} onClose={() => setLogMode(null)} onSave={saveActivity} />
       <ExclusionModal visible={logMode === 'exclusion'} playerId={player.id} onClose={() => setLogMode(null)} onSave={saveExclusion} />
     </>
   );
@@ -1183,6 +1565,104 @@ function GroupScreen({ state }: { state: AppState }) {
         <AppIcon name="trophy" size={50} color={C.lime} />
       </View>
     </ScrollView>
+  );
+}
+
+function StatisticsScreen({ state }: { state: AppState }) {
+  const stats = sportResultStats(state);
+  const leader = stats.standings[0];
+  const leaderPlayer = leader ? state.players.find((player) => player.id === leader.playerId) : undefined;
+
+  const playerName = (playerId?: PlayerId) => state.players.find((player) => player.id === playerId)?.name ?? 'Nobody';
+  const latestResults = [...(state.sportResults ?? [])].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10);
+
+  return (
+    <ScrollView contentContainerStyle={styles.screenContent} showsVerticalScrollIndicator={false}>
+        <Header eyebrow="MATCH RESULTS" title="Statistics" />
+        <View style={styles.statsHero}>
+          <View>
+            <Text style={styles.heroLabel}>MOST WINS</Text>
+            <Text style={styles.statsHeroName}>{leaderPlayer ? leaderPlayer.name : 'No games yet'}</Text>
+            <Text style={styles.statsHeroMeta}>{leader ? `${leader.wins} wins from ${leader.played} games` : 'Log the first result to start the table'}</Text>
+          </View>
+          <View style={styles.statsHeroIcon}><AppIcon name="trophy" size={34} color={C.ink} /></View>
+        </View>
+
+        <View style={styles.sectionHeading}>
+          <Text style={styles.sectionTitle}>Leaderboard</Text>
+          <Text style={styles.sectionMeta}>{stats.totalResults} results</Text>
+        </View>
+        <View style={styles.rankingList}>
+          {stats.standings.map((entry, index) => {
+            const player = state.players.find((item) => item.id === entry.playerId)!;
+            return (
+              <View key={entry.playerId} style={styles.rankingCard}>
+                <Text style={styles.rankNumber}>{index + 1}</Text>
+                <Avatar player={player} size={46} />
+                <View style={{ flex: 1 }}>
+                  <View style={styles.rankNameRow}>
+                    <Text style={styles.rankName}>{player.name}</Text>
+                    <Text style={styles.paceText}>{entry.played ? `${Math.round((entry.wins / entry.played) * 100)}% WIN RATE` : 'NO GAMES'}</Text>
+                  </View>
+                  <ProgressBar value={stats.totalResults ? entry.wins / Math.max(1, stats.totalResults) : 0} color={player.color} track="#ECEAE4" />
+                  <Text style={styles.rankMeta}>{entry.wins} wins · {entry.played} played · {entry.points} points scored</Text>
+                </View>
+                <Text style={styles.rankPercent}>{entry.wins}</Text>
+              </View>
+            );
+          })}
+        </View>
+
+        <View style={styles.sectionHeading}>
+          <Text style={styles.sectionTitle}>By sport</Text>
+          <Text style={styles.sectionMeta}>leaders</Text>
+        </View>
+        <View style={styles.sportStatsGrid}>
+          {stats.bySport.map((entry) => (
+            <View key={entry.sport.id} style={styles.sportStatCard}>
+              <View style={[styles.activityChoiceIcon, { backgroundColor: entry.sport.color }]}><AppIcon name={entry.sport.icon} size={19} color={C.ink} /></View>
+              <Text style={styles.activityRuleName}>{entry.sport.label}</Text>
+              <Text style={styles.activityRuleCopy}>{entry.played ? `${playerName(entry.leaderId)} leads with ${entry.leaderWins}` : 'No results yet'}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.sectionHeading}>
+          <Text style={styles.sectionTitle}>Recent results</Text>
+          <Text style={styles.sectionMeta}>who won what</Text>
+        </View>
+        <View style={styles.timelineCard}>
+          {latestResults.length === 0 ? (
+            <View style={styles.emptyResultRow}>
+              <AppIcon name="chart" size={20} color={C.muted} />
+              <Text style={styles.timelineDetail}>No sport results have been saved yet.</Text>
+            </View>
+          ) : latestResults.map((result, index) => {
+            const definition = activityDefinitions.find((item) => item.id === result.sport);
+            const totalScores = sportResultTotalScores(result);
+            const roundScoreText = result.rounds?.length
+              ? result.rounds
+                .map((round) => result.participantIds.map((playerId) => round.scores[playerId] ?? '-').join('-'))
+                .join(', ')
+              : '';
+            const scoreText = roundScoreText || result.participantIds
+              .map((playerId) => `${playerName(playerId)} ${totalScores[playerId] ?? '-'}`)
+              .join(' · ');
+            return (
+              <View key={result.id} style={[styles.timelineRow, index > 0 && styles.timelineBorder]}>
+                <View style={[styles.timelineIcon, { backgroundColor: definition?.color ?? '#ECEAE4' }]}>
+                  <AppIcon name={definition?.icon ?? 'trophy'} size={15} color={C.ink} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.timelineDate}>{activityLabel(result.sport)} · {displayDate(result.date)}</Text>
+                  <Text style={styles.timelineDetail}>{playerName(result.winnerId)} won{scoreText ? ` · ${scoreText}` : ''}</Text>
+                </View>
+                <Text style={styles.timelineState}>WIN</Text>
+              </View>
+            );
+          })}
+        </View>
+      </ScrollView>
   );
 }
 
@@ -1294,6 +1774,7 @@ function BottomNav({ tab, setTab }: { tab: Tab; setTab: (tab: Tab) => void }) {
   const items: { id: Tab; label: string; icon: string }[] = [
     { id: 'today', label: 'Today', icon: 'checkCircle' },
     { id: 'group', label: 'Group', icon: 'group' },
+    { id: 'statistics', label: 'Stats', icon: 'chart' },
     { id: 'rules', label: 'Rules', icon: 'rules' },
     { id: 'settings', label: 'Profile', icon: 'profile' },
   ];
@@ -1326,14 +1807,15 @@ function AppContent() {
   const lastSyncedSnapshotRef = useRef('');
   const pushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const applyRemoteState = (remote: { activities: Activity[]; exclusions: AppState['exclusions']; revision: number; updatedAt: string }) => {
-    const nextSnapshot = sharedSnapshot(remote);
+  const applyRemoteState = (remote: { activities: Activity[]; exclusions: AppState['exclusions']; sportResults?: SportResult[]; revision: number; updatedAt: string }) => {
+    const nextSnapshot = sharedSnapshot({ ...remote, sportResults: remote.sportResults ?? [] });
     revisionRef.current = remote.revision;
     lastSyncedSnapshotRef.current = nextSnapshot;
     setState((current) => withSeedActivities({
       ...current,
       activities: remote.activities,
       exclusions: remote.exclusions,
+      sportResults: remote.sportResults ?? [],
     }));
     setSyncStatus({
       state: 'synced',
@@ -1399,7 +1881,7 @@ function AppContent() {
     if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
     pushTimerRef.current = setTimeout(() => {
       pushRemoteState(
-        { activities: state.activities, exclusions: state.exclusions },
+        { activities: state.activities, exclusions: state.exclusions, sportResults: state.sportResults ?? [] },
         revisionRef.current,
         clientIdRef.current,
       )
@@ -1410,10 +1892,11 @@ function AppContent() {
     return () => {
       if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
     };
-  }, [state.activities, state.exclusions, ready, remoteReady]);
+  }, [state.activities, state.exclusions, state.sportResults, ready, remoteReady]);
 
   const screen = useMemo(() => {
     if (tab === 'group') return <GroupScreen state={state} />;
+    if (tab === 'statistics') return <StatisticsScreen state={state} />;
     if (tab === 'rules') return <RulesScreen />;
     if (tab === 'settings') return <SettingsScreen state={state} setState={setState} syncStatus={syncStatus} />;
     return <TodayScreen state={state} setState={setState} />;
@@ -1494,6 +1977,7 @@ const styles = StyleSheet.create({
   timelineDate: { color: C.ink, fontSize: 12, fontWeight: '800' },
   timelineDetail: { color: C.muted, fontSize: 10, marginTop: 2 },
   timelineState: { color: C.muted, fontSize: 8, letterSpacing: 0.7, fontWeight: '900' },
+  emptyResultRow: { minHeight: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   targetBanner: { backgroundColor: '#E6E1F2', borderRadius: 21, padding: 15, flexDirection: 'row', alignItems: 'center', gap: 11 },
   targetIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: '#D7CDEA', alignItems: 'center', justifyContent: 'center' },
   targetTitle: { color: C.ink, fontSize: 14, fontWeight: '900' },
@@ -1511,6 +1995,12 @@ const styles = StyleSheet.create({
   moneyEyebrow: { color: '#98A6A1', fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
   moneyValue: { color: '#FFFFFF', fontSize: 29, fontWeight: '900', letterSpacing: -1, marginTop: 4 },
   moneyCopy: { color: '#AAB5B1', fontSize: 10, lineHeight: 15, marginTop: 5, maxWidth: 270 },
+  statsHero: { backgroundColor: C.navy, borderRadius: 25, padding: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  statsHeroName: { color: '#FFFFFF', fontSize: 30, fontWeight: '900', letterSpacing: -0.8, marginTop: 4 },
+  statsHeroMeta: { color: '#AAB5B1', fontSize: 11, fontWeight: '700', marginTop: 5 },
+  statsHeroIcon: { width: 58, height: 58, borderRadius: 20, backgroundColor: C.lime, alignItems: 'center', justifyContent: 'center' },
+  sportStatsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 9 },
+  sportStatCard: { width: '48.6%', backgroundColor: C.card, borderRadius: 19, padding: 13, minHeight: 118 },
   periodCard: { backgroundColor: C.navy, borderRadius: 25, padding: 20, marginBottom: 12 },
   periodLabel: { color: '#98A6A1', fontSize: 9, letterSpacing: 1.2, fontWeight: '900' },
   periodDates: { color: '#FFFFFF', fontSize: 28, fontWeight: '900', letterSpacing: -0.8, marginTop: 5 },
@@ -1558,6 +2048,32 @@ const styles = StyleSheet.create({
   activityChoiceActive: { borderColor: C.ink, backgroundColor: '#F6FAEC' },
   activityChoiceIcon: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   activityChoiceLabel: { color: C.ink, fontSize: 11, fontWeight: '800', flex: 1 },
+  playerSelectGrid: { gap: 8 },
+  playerSelectCard: { minHeight: 58, backgroundColor: C.card, borderRadius: 17, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1.5, borderColor: C.line },
+  playerSelectCardActive: { borderColor: C.ink, backgroundColor: '#F6FAEC' },
+  playerSelectCardLocked: { opacity: 0.82 },
+  playerSelectName: { flex: 1, color: C.ink, fontSize: 13, fontWeight: '900' },
+  scoreBuilder: { marginTop: 10, backgroundColor: '#F6F5F0', borderRadius: 20, borderWidth: 1, borderColor: C.line, padding: 12, gap: 10 },
+  scoreBuilderTitle: { color: C.ink, fontSize: 12, fontWeight: '900' },
+  scoreRoundsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 3 },
+  roundAddButton: { width: 36, height: 36, borderRadius: 13, backgroundColor: C.lime, alignItems: 'center', justifyContent: 'center' },
+  roundList: { gap: 9 },
+  roundCard: { backgroundColor: C.card, borderRadius: 17, borderWidth: 1, borderColor: C.line, padding: 12 },
+  roundTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  roundTitle: { color: C.ink, fontSize: 13, fontWeight: '900' },
+  roundRemoveButton: { width: 30, height: 30, borderRadius: 11, backgroundColor: '#F0EEE8', alignItems: 'center', justifyContent: 'center' },
+  roundScoreGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  roundScoreCell: { flexGrow: 1, flexBasis: '46%', minWidth: 118 },
+  roundScoreName: { color: C.muted, fontSize: 10, fontWeight: '900', marginBottom: 5 },
+  roundScoreInput: { height: 43, borderRadius: 13, backgroundColor: '#F6F5F0', color: C.ink, fontSize: 18, fontWeight: '900', textAlign: 'center', paddingHorizontal: 10 },
+  scoreTotalsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  scoreTotalText: { color: C.muted, fontSize: 10, fontWeight: '900' },
+  scoreCard: { backgroundColor: C.card, borderRadius: 18, borderWidth: 1, borderColor: C.line, paddingHorizontal: 12 },
+  scoreRow: { minHeight: 57, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  scoreBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.line },
+  scorePlayer: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 9 },
+  scoreName: { color: C.ink, fontSize: 13, fontWeight: '900' },
+  scoreInput: { width: 76, minHeight: 40, borderRadius: 13, backgroundColor: '#F6F5F0', color: C.ink, fontSize: 16, fontWeight: '900', textAlign: 'center', paddingHorizontal: 10 },
   ruleHint: { backgroundColor: '#E7E3D9', borderRadius: 15, padding: 12, marginTop: 12, flexDirection: 'row', gap: 8, alignItems: 'center' },
   ruleHintText: { color: C.ink, fontSize: 11, fontWeight: '700', flex: 1 },
   input: { minHeight: 51, backgroundColor: C.card, borderRadius: 15, borderWidth: 1, borderColor: C.line, paddingHorizontal: 14, color: C.ink, fontSize: 15 },

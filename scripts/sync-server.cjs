@@ -23,6 +23,7 @@ function initialState() {
     updatedAt: new Date().toISOString(),
     activities: readSeedActivities(),
     exclusions: [],
+    sportResults: [],
   };
 }
 
@@ -47,6 +48,7 @@ function recordKey(record) {
 function mergeRecords(current, incoming) {
   const activities = new Map(current.activities.map((activity) => [recordKey(activity), activity]));
   const exclusions = new Map(current.exclusions.map((exclusion) => [recordKey(exclusion), exclusion]));
+  const sportResults = new Map((current.sportResults || []).map((result) => [result.id, result]));
 
   for (const activity of incoming.activities || []) {
     activities.set(recordKey(activity), activity);
@@ -58,11 +60,16 @@ function mergeRecords(current, incoming) {
     activities.delete(recordKey(exclusion));
   }
 
+  for (const result of incoming.sportResults || []) {
+    sportResults.set(result.id, result);
+  }
+
   return {
     revision: current.revision + 1,
     updatedAt: new Date().toISOString(),
     activities: [...activities.values()],
     exclusions: [...exclusions.values()],
+    sportResults: [...sportResults.values()],
   };
 }
 
@@ -101,8 +108,8 @@ const server = http.createServer((request, response) => {
     request.on('end', () => {
       try {
         const incoming = JSON.parse(body);
-        if (!Array.isArray(incoming.activities) || !Array.isArray(incoming.exclusions)) {
-          send(response, 400, { error: 'Expected activities and exclusions arrays' });
+        if (!Array.isArray(incoming.activities) || !Array.isArray(incoming.exclusions) || !Array.isArray(incoming.sportResults || [])) {
+          send(response, 400, { error: 'Expected activities, exclusions, and sportResults arrays' });
           return;
         }
         const next = mergeRecords(readState(), incoming);

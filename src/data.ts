@@ -1,4 +1,4 @@
-import { Activity, ActivityDefinition, ActivityType, AppState, Exclusion, PlayerId } from './types';
+import { Activity, ActivityDefinition, ActivityType, AppState, Exclusion, PlayerId, SportResult } from './types';
 import { seedActivities } from './seedData';
 
 export const CHALLENGE_START = '2026-09-01';
@@ -29,7 +29,12 @@ export const initialState: AppState = {
   ],
   activities: seedActivities,
   exclusions: [],
+  sportResults: [],
 };
+
+export const sportResultDefinitions = activityDefinitions.filter((item) =>
+  ['running', 'stairmaster', 'cycling', 'swimming', 'golf', 'tennis', 'padel', 'other'].includes(item.id),
+);
 
 export const getDateKey = (date = new Date()) => {
   const year = date.getFullYear();
@@ -137,6 +142,10 @@ export function createExclusionId(playerId: PlayerId, date: string) {
   return `ex-${playerId}-${date}-${Date.now()}`;
 }
 
+export function createSportResultId(sport: ActivityType, date: string) {
+  return `result-${sport}-${date}-${Date.now()}`;
+}
+
 export function activityLabel(type: ActivityType) {
   return activityDefinitions.find((item) => item.id === type)?.label ?? type;
 }
@@ -149,6 +158,76 @@ export function upsertExclusion(exclusions: Exclusion[], exclusion: Exclusion) {
   return [...exclusions.filter((item) => !(item.playerId === exclusion.playerId && item.date === exclusion.date)), exclusion];
 }
 
+export function upsertSportResult(results: SportResult[], result: SportResult) {
+  return [...results.filter((item) => item.id !== result.id), result].sort((a, b) => b.date.localeCompare(a.date));
+}
+
+export function sportResultTotalScores(result: SportResult) {
+  if (!result.rounds?.length) return result.scores;
+  return result.rounds.reduce<Partial<Record<PlayerId, number>>>((totals, round) => {
+    result.participantIds.forEach((playerId) => {
+      totals[playerId] = (totals[playerId] ?? 0) + (round.scores[playerId] ?? 0);
+    });
+    return totals;
+  }, {});
+}
+
+export function sportResultStats(state: AppState) {
+  const byPlayer = new Map<PlayerId, {
+    playerId: PlayerId;
+    played: number;
+    wins: number;
+    points: number;
+    sportWins: Partial<Record<ActivityType, number>>;
+  }>();
+
+  state.players.forEach((player) => {
+    byPlayer.set(player.id, {
+      playerId: player.id,
+      played: 0,
+      wins: 0,
+      points: 0,
+      sportWins: {},
+    });
+  });
+
+  state.sportResults.forEach((result) => {
+    const totalScores = sportResultTotalScores(result);
+    result.participantIds.forEach((playerId) => {
+      const entry = byPlayer.get(playerId);
+      if (!entry) return;
+      entry.played += 1;
+      entry.points += totalScores[playerId] ?? 0;
+    });
+
+    const winner = byPlayer.get(result.winnerId);
+    if (winner) {
+      winner.wins += 1;
+      winner.sportWins[result.sport] = (winner.sportWins[result.sport] ?? 0) + 1;
+    }
+  });
+
+  const standings = [...byPlayer.values()].sort((a, b) => b.wins - a.wins || b.points - a.points || b.played - a.played);
+  const bySport = sportResultDefinitions.map((sport) => {
+    const results = state.sportResults.filter((result) => result.sport === sport.id);
+    const wins = new Map<PlayerId, number>();
+    results.forEach((result) => wins.set(result.winnerId, (wins.get(result.winnerId) ?? 0) + 1));
+    const leader = [...wins.entries()].sort((a, b) => b[1] - a[1])[0];
+    return {
+      sport,
+      played: results.length,
+      leaderId: leader?.[0],
+      leaderWins: leader?.[1] ?? 0,
+    };
+  });
+
+  return {
+    totalResults: state.sportResults.length,
+    standings,
+    bySport,
+  };
+}
+
 export function withSeedActivities(state: AppState) {
   const existingKeys = new Set(state.activities.map((activity) => `${activity.playerId}:${activity.date}`));
   return {
@@ -157,5 +236,6 @@ export function withSeedActivities(state: AppState) {
       ...seedActivities.filter((activity) => !existingKeys.has(`${activity.playerId}:${activity.date}`)),
       ...state.activities,
     ],
+    sportResults: state.sportResults ?? [],
   };
 }

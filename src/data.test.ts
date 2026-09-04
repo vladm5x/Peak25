@@ -5,9 +5,12 @@ import {
   isActivityValid,
   isoWeekKey,
   playerProgress,
+  sportResultStats,
+  sportResultTotalScores,
   upsertActivity,
+  upsertSportResult,
 } from './data';
-import { Activity, ActivityType, AppState, PlayerId } from './types';
+import { Activity, ActivityType, AppState, PlayerId, SportResult } from './types';
 
 function assert(condition: unknown, message: string) {
   if (!condition) throw new Error(message);
@@ -126,11 +129,67 @@ function testCompletionRequiresActivityTargetAndLegWeeks() {
   assert(progress.completed, 'Participant should complete after meeting activity target and all leg weeks');
 }
 
+function testSportResultStats() {
+  const results: SportResult[] = [
+    {
+      id: 'padel-1',
+      date: '2026-09-04',
+      sport: 'padel',
+      winnerId: 'simon',
+      participantIds: ['vlad', 'simon'],
+      scores: { vlad: 4, simon: 6 },
+      rounds: [
+        { id: 'set-1', label: 'Set 1', scores: { vlad: 4, simon: 6 } },
+        { id: 'set-2', label: 'Set 2', scores: { vlad: 3, simon: 6 } },
+      ],
+    },
+    {
+      id: 'tennis-1',
+      date: '2026-09-05',
+      sport: 'tennis',
+      winnerId: 'vlad',
+      participantIds: ['vlad', 'simon'],
+      scores: { vlad: 7, simon: 5 },
+    },
+    {
+      id: 'padel-2',
+      date: '2026-09-06',
+      sport: 'padel',
+      winnerId: 'simon',
+      participantIds: ['simon', 'ali'],
+      scores: { simon: 6, ali: 2 },
+    },
+  ];
+  const stats = sportResultStats({ ...stateFor(), sportResults: results });
+  assert(stats.standings[0]?.playerId === 'simon', 'Most wins should lead the sport-result standings');
+  assert(stats.standings[0]?.wins === 2, 'Simon should have two wins');
+  assert(sportResultTotalScores(results[0]!).simon === 12, 'Detailed round scores should sum into a total score');
+  assert(stats.standings.find((entry) => entry.playerId === 'vlad')?.points === 14, 'Player points should sum detailed rounds plus flat score entries');
+  assert(stats.bySport.find((entry) => entry.sport.id === 'padel')?.leaderId === 'simon', 'Per-sport leader should be calculated from wins');
+}
+
+function testSportResultUpsertReplacesById() {
+  const first: SportResult = {
+    id: 'result-1',
+    date: '2026-09-04',
+    sport: 'padel',
+    winnerId: 'vlad',
+    participantIds: ['vlad', 'simon'],
+    scores: { vlad: 6, simon: 4 },
+  };
+  const replacement: SportResult = { ...first, winnerId: 'simon', scores: { vlad: 4, simon: 6 } };
+  const results = upsertSportResult(upsertSportResult([], first), replacement);
+  assert(results.length === 1, 'Saving the same sport result id should replace the previous record');
+  assert(results[0]?.winnerId === 'simon', 'The replacement result should be retained');
+}
+
 testActivityBoundaries();
 testChallengeShape();
 testOneActivityPerDay();
 testExclusionsRecalculateTarget();
 testLegWeekTargetTracksElapsedWeeks();
 testCompletionRequiresActivityTargetAndLegWeeks();
+testSportResultStats();
+testSportResultUpsertReplacesById();
 
 console.log('Peak 25 contract tests passed');
